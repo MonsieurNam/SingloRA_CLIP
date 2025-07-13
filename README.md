@@ -1,7 +1,11 @@
 ```
+apt install python3 python3-pip git
+
+```
+```
 %cd /content/CLIP-LoRA/
 # 'dtd', 'eurosat', 'caltech101', 'food101', 'oxford_pets', 'stanford_cars', 'oxford_flowers', 'sun397', 'ucf101', 'imagenet', 'fgvc'
-!python main.py \
+!python3 main.py \
 --dataset caltech101 \
 --root_path /content/DATA \
 --shots 1 \

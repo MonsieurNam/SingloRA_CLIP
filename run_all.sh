@@ -5,7 +5,7 @@
 # ==============================================================================
 #
 # Hướng dẫn sử dụng:
-# 1. Lưu tệp này với tên 'run.sh' trong thư mục /content/CLIP-LoRA/
+# 1. Lưu tệp này với tên 'run.sh' trong thư mục /root/CLIP-LoRA/
 # 2. Cấp quyền thực thi cho tệp: chmod +x run.sh
 # 3. Chạy script từ terminal: ./run.sh
 #
@@ -14,16 +14,16 @@
 #
 # ==============================================================================
 
-DATASETS=("caltech101" "dtd" "eurosat" "food101" "oxford_pets" "stanford_cars" "oxford_flowers" "sun397" "ucf101" "fgvc")
+DATASETS=("caltech101" "dtd" "eurosat" "food101" "oxford_pets" "oxford_flowers" "ucf101" "fgvc")
 
 # Số lượng shots cần chạy (thêm hoặc bớt số trong dấu ngoặc)
-SHOTS=(1 4 8 16)
+SHOTS=(1 4)
 
 # Loại adapter cần sử dụng ('lora' hoặc 'singlora')
 ADAPTER_TYPE="singlora"
 
 # Đường dẫn đến thư mục chứa dữ liệu
-ROOT_PATH="/content/DATA"
+ROOT_PATH="/root/DATA"
 
 # Đường dẫn để lưu các checkpoint
 SAVE_PATH="./checkpoints"
@@ -44,7 +44,7 @@ for DATASET in "${DATASETS[@]}"; do
   for SHOT in "${SHOTS[@]}"; do
 
     # Tính toán tổng số lần lặp
-    TOTAL_ITERS=$(($BASE_ITERS * $SHOT))
+    TOTAL_ITERS=$((500 * $SHOT))
 
     # Tạo tên file log duy nhất cho mỗi lần chạy
     LOG_FILE="${LOG_DIR}/${ADAPTER_TYPE}_${DATASET}_${SHOT}shot_r${RANK}_a${ALPHA}_lr${LEARNING_RATE}.log"
@@ -56,7 +56,7 @@ for DATASET in "${DATASETS[@]}"; do
     echo "======================================================================" | tee -a $LOG_FILE
 
     # Xây dựng lệnh python
-    COMMAND="python main.py \
+    COMMAND="python3 main.py \
       --dataset ${DATASET} \
       --root_path ${ROOT_PATH} \
       --shots ${SHOT} \
