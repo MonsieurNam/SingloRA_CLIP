@@ -1,67 +1,84 @@
 #!/bin/bash
 
 # ==============================================================================
-# SCRIPT TỰ ĐỘNG CHẠY FINE-TUNING CLIP VỚI LORA/SINGLORA
+# SCRIPT TỰ ĐỘNG CHẠY VÀ TỔNG HỢP KẾT QUẢ
 # ==============================================================================
 #
-# Hướng dẫn sử dụng:
-# 1. Lưu tệp này với tên 'run.sh' trong thư mục /root/CLIP-LoRA/
-# 2. Cấp quyền thực thi cho tệp: chmod +x run.sh
-# 3. Chạy script từ terminal: ./run.sh
-#
-# Script sẽ tự động lặp qua danh sách các bộ dữ liệu và số lượng shots,
-# sau đó gọi lệnh python main.py với các cấu hình tương ứng.
+# Chức năng:
+# - Lặp qua các bộ dữ liệu và số lượng shots được chỉ định.
+# - Chạy thử nghiệm với một bộ siêu tham số CỐ ĐỊNH.
+# - Tự động trích xuất accuracy cuối cùng và lưu vào tệp summary.csv.
 #
 # ==============================================================================
 
-DATASETS=("caltech101" "dtd" "eurosat" "food101" "oxford_pets" "oxford_flowers" "ucf101" "fgvc")
+# --- PHẦN 1: CẤU HÌNH THỬ NGHIỆM ---
 
-# Số lượng shots cần chạy (thêm hoặc bớt số trong dấu ngoặc)
-SHOTS=(1 4)
+# Các bộ dữ liệu cần chạy
+DATASETS=("eurosat" "oxford_flowers" "ucf101" "fgvc")
 
-# Loại adapter cần sử dụng ('lora' hoặc 'singlora')
+# Số lượng shots cần chạy
+SHOTS=(16)
+
+# Cấu hình CỐ ĐỊNH cho tất cả các lần chạy
 ADAPTER_TYPE="singlora"
+LEARNING_RATE="2e-4"
+RANK=2
+ALPHA=1
+RAMP_UP_STEPS=400
+LORA_PARAMS="q k v"
+BASE_ITERS=500
+BATCH_SIZE=32
 
-# Đường dẫn đến thư mục chứa dữ liệu
+# Đường dẫn
 ROOT_PATH="/root/DATA"
-
-# Đường dẫn để lưu các checkpoint
 SAVE_PATH="./checkpoints"
 
-# Siêu tham số dành riêng cho SingLoRA
-RAMP_UP_STEPS=100
-
-# Thư mục để lưu file log kết quả
+# Thiết lập thư mục và tệp tổng hợp
 LOG_DIR="results_logs"
+SUMMARY_FILE="results_summary_${ADAPTER_TYPE}_r${RANK}_a${ALPHA}_lr${LEARNING_RATE}.csv" # Tên file summary rõ ràng hơn
 mkdir -p $LOG_DIR
 
 
-# --- PHẦN 2: VÒNG LẶP THỰC THI ---
+# --- PHẦN 2: CHUẨN BỊ TỆP TỔNG HỢP ---
+
+# Kiểm tra xem tệp tổng hợp đã tồn tại chưa, nếu chưa thì tạo header
+if [ ! -f "$SUMMARY_FILE" ]; then
+    echo "Creating new summary file: ${SUMMARY_FILE}"
+    echo "Dataset,Shots,Final_Accuracy,Log_File" > $SUMMARY_FILE
+fi
+
+
+# --- PHẦN 3: VÒNG LẶP THỰC THI ---
 
 # Lặp qua từng bộ dữ liệu
 for DATASET in "${DATASETS[@]}"; do
   # Lặp qua từng số lượng shots
   for SHOT in "${SHOTS[@]}"; do
 
-    # Tính toán tổng số lần lặp
-    TOTAL_ITERS=$((500 * $SHOT))
-
     # Tạo tên file log duy nhất cho mỗi lần chạy
-    LOG_FILE="${LOG_DIR}/${ADAPTER_TYPE}_${DATASET}_${SHOT}shot_r${RANK}_a${ALPHA}_lr${LEARNING_RATE}.log"
+    CONFIG_NAME="${ADAPTER_TYPE}_${DATASET}_${SHOT}shot"
+    LOG_FILE="${LOG_DIR}/${CONFIG_NAME}.log"
+    
+    # Xóa file log cũ để đảm bảo log mới sạch sẽ
+    rm -f $LOG_FILE
 
-    echo "======================================================================" | tee -a $LOG_FILE
-    echo "Starting run for: ${DATASET} with ${SHOT} shots" | tee -a $LOG_FILE
-    echo "Adapter: ${ADAPTER_TYPE}, Rank: ${RANK}, Alpha: ${ALPHA}, LR: ${LEARNING_RATE}" | tee -a $LOG_FILE
-    echo "Saving logs to: ${LOG_FILE}"
-    echo "======================================================================" | tee -a $LOG_FILE
+    echo "======================================================================"
+    echo "Starting run: ${CONFIG_NAME}"
+    echo "======================================================================"
 
-    # Xây dựng lệnh python
+    # Xây dựng lệnh python với các cấu hình đã định sẵn
     COMMAND="python3 main.py \
       --dataset ${DATASET} \
       --root_path ${ROOT_PATH} \
       --shots ${SHOT} \
+      --n_iters ${BASE_ITERS} \
+      --batch_size ${BATCH_SIZE} \
       --adapter ${ADAPTER_TYPE} \
+      --lr ${LEARNING_RATE} \
+      --r ${RANK} \
+      --alpha ${ALPHA} \
       --ramp_up_steps ${RAMP_UP_STEPS} \
+      --params ${LORA_PARAMS} \
       --save_path ${SAVE_PATH}"
 
     # In lệnh ra màn hình
@@ -69,14 +86,29 @@ for DATASET in "${DATASETS[@]}"; do
     echo "${COMMAND}"
     echo ""
 
-    # Thực thi lệnh và ghi output vào cả terminal và file log
-    # stdbuf -oL -eL giúp ghi log theo thời gian thực thay vì đợi buffer đầy
-    stdbuf -oL -eL ${COMMAND} | tee -a $LOG_FILE
+    # Thực thi lệnh và ghi toàn bộ output (cả stdout và stderr) vào file log
+    eval ${COMMAND} > ${LOG_FILE} 2>&1
 
-    echo "Finished run for: ${DATASET} with ${SHOT} shots." | tee -a $LOG_FILE
-    echo "" | tee -a $LOG_FILE
+    # --- PHẦN 4: TRÍCH XUẤT VÀ LƯU KẾT QUẢ ---
+
+    # Tìm dòng chứa kết quả accuracy cuối cùng trong file log
+    FINAL_ACC=$(tail -n 5 "${LOG_FILE}" | grep "Final test accuracy" | awk '{print $NF}' | sed 's/\.$//')
+
+    # Nếu không tìm thấy kết quả (do lỗi), ghi là "FAILED"
+    if [ -z "$FINAL_ACC" ]; then
+        FINAL_ACC="FAILED"
+    fi
+
+    echo "----------------------------------------------------------------------"
+    echo "Run finished for ${CONFIG_NAME}. Final Accuracy: ${FINAL_ACC}"
+    echo "----------------------------------------------------------------------"
+    echo ""
+
+    # Ghi kết quả vào tệp CSV
+    echo "${DATASET},${SHOT},${FINAL_ACC},${LOG_FILE}" >> $SUMMARY_FILE
 
   done
 done
 
 echo "All experiments finished."
+echo "Results summary saved to ${SUMMARY_FILE}"
