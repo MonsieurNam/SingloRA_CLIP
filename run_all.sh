@@ -91,8 +91,11 @@ for DATASET in "${DATASETS[@]}"; do
 
     # --- PHẦN 4: TRÍCH XUẤT VÀ LƯU KẾT QUẢ ---
 
-    # Tìm dòng chứa kết quả accuracy cuối cùng trong file log
-    FINAL_ACC=$(tail -n 5 "${LOG_FILE}" | grep "Final test accuracy" | awk '{print $NF}' | sed 's/\.$//')
+    # Tìm dòng cuối cùng chứa "Final test accuracy" trong file log
+    FINAL_ACC_LINE=$(grep "Final test accuracy" "${LOG_FILE}" | tail -n 1)
+
+    # Trích xuất số cuối cùng trong dòng, loại bỏ dấu chấm nếu có
+    FINAL_ACC=$(echo "$FINAL_ACC_LINE" | awk '{print $NF}' | sed 's/[[:punct:]]//g')
 
     # Nếu không tìm thấy kết quả (do lỗi), ghi là "FAILED"
     if [ -z "$FINAL_ACC" ]; then

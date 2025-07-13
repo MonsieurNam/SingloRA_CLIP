@@ -1,5 +1,4 @@
 # @title lora.py
-# %%writefile /content/CLIP-LoRA/lora.py
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm

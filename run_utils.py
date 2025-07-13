@@ -1,5 +1,4 @@
 # @title run_utils.py
-# %%writefile /content/CLIP-LoRA/run_utils.py
 
 import random
 import argparse

@@ -1,6 +1,4 @@
 # @title loralib/layers_singlora.py
-# %%writefile  /content/CLIP-LoRA/loralib/layers_singlora.py
-#  ------------------------------------------------------------------------------------------
 #  [SingLoRA] - layers_singlora.py
 #  This code implements the SingLoRA adapter layers based on the paper:
 #  "SingLoRA: Low Rank Adaptation Using a Single Matrix"

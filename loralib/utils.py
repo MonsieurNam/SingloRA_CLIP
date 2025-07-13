@@ -1,6 +1,4 @@
 # @title loralib/utils.py
-# %%writefile /content/CLIP-LoRA/loralib/utils.py
-# singlora_lib/utils.py
 
 import os
 import torch

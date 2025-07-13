@@ -1,5 +1,5 @@
 ```
-apt install python3 python3-pip git
+apt install python3 python3-pip git zip unzip
 
 ```
 ```
