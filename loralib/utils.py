@@ -6,7 +6,7 @@ import torch.nn as nn
 from typing import Dict, List
 
 from .layers import LoRALayer, PlainMultiheadAttentionLoRA
-from .layers_singlora import PlainMultiheadAttentionSingLoRA
+from .layers_singlora import PlainMultiheadAttentionSingLoRA, LinearSingLoRA, LinearDySingLoRA, PlainMultiheadAttentionAdapter
 
 # Các từ điển này được sao chép từ loralib/utils.py để giữ nguyên logic
 INDEX_POSITIONS_TEXT = {
@@ -74,25 +74,6 @@ def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
                     hasattr(m, 'bias') and \
                     m.bias is not None:
                 m.bias.requires_grad = True
-    else:
-        raise NotImplementedError
-
-
-def lora_state_dict(model: nn.Module, bias: str = 'none') -> Dict[str, torch.Tensor]:
-    my_state_dict = model.state_dict()
-    if bias == 'none':
-        return {k: my_state_dict[k] for k in my_state_dict if 'lora_' in k}
-    elif bias == 'all':
-        return {k: my_state_dict[k] for k in my_state_dict if 'lora_' in k or 'bias' in k}
-    elif bias == 'lora_only':
-        to_return = {}
-        for k in my_state_dict:
-            if 'lora_' in k:
-                to_return[k] = my_state_dict[k]
-                bias_name = k.split('lora_')[0]+'bias'
-                if bias_name in my_state_dict:
-                    to_return[bias_name] = my_state_dict[bias_name]
-        return to_return
     else:
         raise NotImplementedError
 
@@ -249,117 +230,137 @@ def load_lora(args, list_lora_layers):
 
     print(f'LoRA weights loaded from {load_path}')
 
-def apply_singlora(args, clip_model):
+def apply_adapter(args, clip_model):
     """
-    Applies SingLoRA layers to the specified parts of the CLIP model.
+    Hàm chung để áp dụng bất kỳ loại adapter nào (SingLoRA, DySingLoRA)
+    vào mô hình CLIP.
     """
-    list_singlora_layers = []
-    # Logic is identical to apply_lora, just uses PlainMultiheadAttentionSingLoRA
-    if args.encoder == 'text' or args.encoder == 'both':
-        indices = INDEX_POSITIONS_TEXT[args.position]
-        text_encoder = clip_model.transformer
-        for i, block in enumerate(text_encoder.resblocks):
-            if i in indices:
-                for name, submodule in block.named_children():
-                    if isinstance(submodule, nn.MultiheadAttention):
-                        new_mha_singlora = PlainMultiheadAttentionSingLoRA(
-                            submodule,
-                            r=args.r,
-                            lora_alpha=args.alpha,
-                            ramp_up_steps=args.ramp_up_steps,
-                            enable_lora=args.params
-                        )
-                        setattr(block, name, new_mha_singlora)
-                        list_singlora_layers.append(new_mha_singlora)
-
-    if args.encoder == 'vision' or args.encoder == 'both':
-        indices = INDEX_POSITIONS_VISION[args.backbone][args.position]
-        vision_encoder = clip_model.visual.transformer
-        for i, block in enumerate(vision_encoder.resblocks):
-            if i in indices:
-                for name, submodule in block.named_children():
-                    if isinstance(submodule, nn.MultiheadAttention):
-                        new_mha_singlora = PlainMultiheadAttentionSingLoRA(
-                            submodule,
-                            r=args.r,
-                            lora_alpha=args.alpha,
-                            ramp_up_steps=args.ramp_up_steps,
-                            enable_lora=args.params
-                        )
-                        setattr(block, name, new_mha_singlora)
-                        list_singlora_layers.append(new_mha_singlora)
-
-    print(f"Applied SingLoRA to {len(list_singlora_layers)} attention layers.")
-    return list_singlora_layers
-
-def save_singlora(args, list_singlora_layers):
-    """
-    Saves only the learnable 'lora_A' parameters from SingLoRA layers.
-    """
-    weights = {}
-    for i, layer in enumerate(list_singlora_layers):
-        layer_weights = {}
-        # Each projection (q, k, v, o) is now a LinearSingLoRA layer
-        if 'q' in args.params:
-            layer_weights['q_proj'] = {'lora_A': layer.q_proj.lora_A.data}
-        if 'k' in args.params:
-            layer_weights['k_proj'] = {'lora_A': layer.k_proj.lora_A.data}
-        if 'v' in args.params:
-            layer_weights['v_proj'] = {'lora_A': layer.v_proj.lora_A.data}
-        if 'o' in args.params:
-            layer_weights['proj'] = {'lora_A': layer.out_proj.lora_A.data} # Corrected from your lora code 'proj' to 'out_proj'
-
-        weights[f'layer_{i}'] = layer_weights
-
-    metadata = {
-        'adapter': 'singlora',
-        'r': args.r,
-        'alpha': args.alpha,
-        'ramp_up_steps': args.ramp_up_steps,
-        'encoder': args.encoder,
-        'params': args.params,
-        'position': args.position
+    # Map tên adapter từ args sang lớp tương ứng
+    adapter_map = {
+        'singlora': LinearSingLoRA,
+        'dysinglora': LinearDySingLoRA
     }
 
-    save_data = {'weights': weights, 'metadata': metadata}
+    # Kiểm tra xem adapter có được hỗ trợ không
+    if args.adapter not in adapter_map:
+        raise ValueError(f"Adapter type '{args.adapter}' is not supported by this function.")
 
-    backbone = args.backbone.replace('/', '').replace('-', '').lower()
-    save_dir = f'{args.save_path}/{backbone}/{args.dataset}/{args.shots}shots/seed{args.seed}'
+    linear_adapter_class = adapter_map[args.adapter]
+    print(f">> Applying {args.adapter.upper()} adapter...")
+
+    # Tạo một dict chứa các kwargs chung cho các lớp adapter
+    adapter_kwargs = {
+        'r': args.r,
+        'lora_alpha': args.alpha,
+        'ramp_up_steps': args.ramp_up_steps
+    }
+
+    # Lặp qua cả hai encoder
+    for encoder_name in ['text', 'vision']:
+        if args.encoder == encoder_name or args.encoder == 'both':
+            print(f"   Processing {encoder_name.capitalize()} Encoder...")
+
+            if encoder_name == 'text':
+                encoder = clip_model.transformer
+                indices = INDEX_POSITIONS_TEXT[args.position]
+            else:
+                encoder = clip_model.visual.transformer
+                indices = INDEX_POSITIONS_VISION[args.backbone][args.position]
+
+            for i, block in enumerate(encoder.resblocks):
+                if i in indices:
+                    # Thay thế MHA bằng lớp vỏ chung
+                    new_mha = PlainMultiheadAttentionAdapter(
+                        block.attn,
+                        linear_adapter_class=linear_adapter_class,
+                        **adapter_kwargs,
+                        enable_lora=args.params
+                    )
+                    block.attn = new_mha
+
+                    # Áp dụng cho các lớp MLP nếu được yêu cầu
+                    if 'mlp' in args.params:
+                        for mlp_layer_name, mlp_layer in block.mlp.named_children():
+                            if isinstance(mlp_layer, nn.Linear):
+                                new_linear_layer = linear_adapter_class(
+                                    mlp_layer,
+                                    **adapter_kwargs
+                                )
+                                setattr(block.mlp, mlp_layer_name, new_linear_layer)
+
+    print("Finished applying adapters.")
+    return [] # Không cần trả về list nữa
+
+def save_adapter(args, model):
+    """
+    Hàm chung để lưu các trọng số có thể huấn luyện của adapter.
+    """
+    adapter_state_dict = {}
+    
+    # Thu thập các tham số cần lưu từ state_dict của mô hình
+    for name, param in model.state_dict().items():
+        # Dựa vào quy ước đặt tên để xác định tham số của adapter
+        if 'lora_' in name or 'scaler' in name:
+            adapter_state_dict[name] = param
+
+    # Tạo metadata để xác minh khi tải
+    metadata = {
+        'adapter': args.adapter,
+        'r': args.r,
+        'alpha': args.alpha,
+        'params': args.params,
+        'position': args.position,
+        'encoder': args.encoder,
+        'backbone': args.backbone,
+    }
+    
+    save_data = {
+        'weights': adapter_state_dict,
+        'metadata': metadata
+    }
+    
+    # Tạo đường dẫn và lưu file
+    backbone_str = args.backbone.replace('/', '')
+    save_dir = os.path.join(args.save_path, args.adapter, backbone_str, args.dataset, f"{args.shots}shots", f"seed{args.seed}")
     os.makedirs(save_dir, exist_ok=True)
-
-    save_path = f'{save_dir}/{args.filename}.pt'
+    save_path = os.path.join(save_dir, 'adapter_weights.pt')
+    
     torch.save(save_data, save_path)
-    print(f'SingLoRA weights saved to {save_path}')
+    print(f"{args.adapter.upper()} weights saved to {save_path}")
 
 
-def load_singlora(args, list_singlora_layers):
+def load_adapter(args, model):
     """
-    Loads the 'lora_A' parameters into SingLoRA layers.
+    Hàm chung để tải các trọng số adapter vào mô hình.
     """
-    backbone = args.backbone.replace('/', '').replace('-', '').lower()
-    load_path = f'{args.save_path}/{backbone}/{args.dataset}/{args.shots}shots/seed{args.seed}/{args.filename}.pt'
-
+    backbone_str = args.backbone.replace('/', '')
+    load_path = os.path.join(args.save_path, args.adapter, backbone_str, args.dataset, f"{args.shots}shots", f"seed{args.seed}", 'adapter_weights.pt')
+    
     if not os.path.exists(load_path):
-        raise FileNotFoundError(f'File {load_path} does not exist.')
-
-    loaded_data = torch.load(load_path)
-    metadata = loaded_data['metadata']
-
-    # --- Verification ---
-    if metadata.get('adapter') != 'singlora':
-        raise ValueError("Adapter type mismatch: Expected 'singlora'.")
-    # ... (add other checks for r, alpha, ramp_up_steps etc. like in your LoRA loader)
-
+        raise FileNotFoundError(f"Adapter weights not found at: {load_path}")
+        
+    loaded_data = torch.load(load_path, map_location='cpu')
+    
+    # Kiểm tra metadata (rất quan trọng để tránh lỗi)
+    metadata = loaded_data.get('metadata', {})
+    expected_metadata = {
+        'adapter': args.adapter,
+        'r': args.r,
+        'alpha': args.alpha,
+    }
+    for key, value in expected_metadata.items():
+        if metadata.get(key) != value:
+            raise ValueError(f"Metadata mismatch for '{key}'! Expected '{value}', but found '{metadata.get(key)}' in checkpoint.")
+    
     weights = loaded_data['weights']
-    for i, layer in enumerate(list_singlora_layers):
-        layer_weights = weights.get(f'layer_{i}', {})
-        if 'q' in args.params and 'q_proj' in layer_weights:
-            layer.q_proj.lora_A.data.copy_(layer_weights['q_proj']['lora_A'])
-        if 'k' in args.params and 'k_proj' in layer_weights:
-            layer.k_proj.lora_A.data.copy_(layer_weights['k_proj']['lora_A'])
-        if 'v' in args.params and 'v_proj' in layer_weights:
-            layer.v_proj.lora_A.data.copy_(layer_weights['v_proj']['lora_A'])
-        if 'o' in args.params and 'proj' in layer_weights:
-            layer.out_proj.lora_A.data.copy_(layer_weights['proj']['lora_A'])
-
-    print(f'SingLoRA weights loaded from {load_path}')
+    
+    # Tải trọng số vào mô hình. `strict=False` là cần thiết vì chúng ta
+    # chỉ tải một phần nhỏ của toàn bộ state_dict.
+    incompatible_keys = model.load_state_dict(weights, strict=False)
+    
+    if incompatible_keys.missing_keys:
+        print(f"Info: Some adapter keys were not found in the model state_dict (this is expected): {incompatible_keys.missing_keys[:5]}...")
+    if incompatible_keys.unexpected_keys:
+        print(f"Warning: The checkpoint contains unexpected keys not present in the model: {incompatible_keys.unexpected_keys}")
+        
+    print(f"{args.adapter.upper()} weights loaded from {load_path}")

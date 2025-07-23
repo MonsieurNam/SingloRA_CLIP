@@ -31,7 +31,7 @@ def get_arguments():
     # --- START OF MODIFICATIONS FOR PHASE 2 ---
 
     # General Adapter arguments
-    parser.add_argument('--adapter', type=str, default='lora', choices=['lora', 'singlora'],
+    parser.add_argument('--adapter', type=str, default='lora', choices=['lora', 'singlora', 'dysinglora'],
                         help='The type of adapter to use for fine-tuning.')
 
     # LoRA / SingLoRA arguments (shared)

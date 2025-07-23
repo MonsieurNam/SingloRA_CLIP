@@ -6,16 +6,7 @@ import clip  # Giả sử thư mục clip đã có trong dự án
 
 from utils import *
 
-# ==============================================================================
-# Import các hàm tiện ích cho cả LoRA và SingLoRA
-# ==============================================================================
-
-# Các hàm này hoạt động cho cả hai vì chúng tìm kiếm tiền tố 'lora_'
-from loralib.utils import mark_only_lora_as_trainable, get_lora_parameters
-
-# Import các hàm cụ thể cho từng loại adapter
-from loralib.utils import apply_lora, save_lora, load_lora
-from loralib.utils import apply_singlora, save_singlora, load_singlora
+from loralib.utils import apply_lora, load_adapter, save_lora, load_lora, apply_adapter, mark_only_lora_as_trainable, get_lora_parameters, save_adapter
 # ==============================================================================
 
 
@@ -90,52 +81,11 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     if args.adapter == 'lora':
         print(f"Applying LoRA adapter with r={args.r}, alpha={args.alpha}...")
         list_adapter_layers = apply_lora(args, clip_model)
-    elif args.adapter == 'singlora':
+    elif args.adapter in ['singlora', 'dysinglora']:
         print(f"Applying SingLoRA adapter with r={args.r}, alpha={args.alpha}, T={args.ramp_up_steps}...")
-        list_adapter_layers = apply_singlora(args, clip_model)
+        list_adapter_layers = apply_adapter(args, clip_model)
 
     clip_model = clip_model.cuda()
-
-
-    import copy
-    clip_model_original = copy.deepcopy(clip_model)
-    clip_model_original.cuda().eval()
-
-    # Áp dụng adapter
-    list_adapter_layers = []
-    if args.adapter == 'singlora':
-        print(f"Applying SingLoRA adapter...")
-        list_adapter_layers = apply_singlora(args, clip_model)
-
-    clip_model = clip_model.cuda()
-    clip_model.eval() # Chuyển sang chế độ eval để so sánh
-
-    # ==================== DEBUG LOGS START ====================
-    print("\n--- DEBUG SANITY CHECK: Comparing MHA outputs ---")
-    # Lấy một khối attention từ vision encoder để kiểm tra
-    # original_block = clip_model_original.visual.transformer.resblocks[0]
-    # singlora_block = clip_model.visual.transformer.resblocks[0]
-
-    # # Tạo một tensor đầu vào ngẫu nhiên
-    # dummy_input = torch.randn(197, 1, 768).cuda() # (seq_len, batch_size, embed_dim) for ViT-B/16
-
-    # # Lấy đầu ra từ MHA gốc
-    # with torch.no_grad():
-    #     output_original, _ = original_block.attn(dummy_input, dummy_input, dummy_input, need_weights=False)
-
-    # # Lấy đầu ra từ MHA của chúng ta (chưa có cập nhật SingLoRA vì u(0)=0)
-    # with torch.no_grad():
-    #     output_singlora, _ = singlora_block.attn(dummy_input, dummy_input, dummy_input, need_weights=False)
-
-    # # So sánh sự khác biệt
-    # difference = torch.dist(output_original, output_singlora, p=2).item()
-    # print(f"Difference between original MHA and SingLoRA MHA (at init): {difference:.8f}")
-    # if difference < 1e-5:
-    #     print("SANITY CHECK PASSED: Initial outputs are identical.")
-    # else:
-    #     print("SANITY CHECK FAILED: There is a logic error in MHA layer replacement.")
-    # print("--------------------------------------------------\n")
-    # ===================== DEBUG LOGS END =====================
 
     # Chế độ chỉ đánh giá (không huấn luyện)
     if args.eval_only:
@@ -143,7 +93,7 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
         if args.adapter == 'lora':
             load_lora(args, list_adapter_layers)
         elif args.adapter == 'singlora':
-            load_singlora(args, list_adapter_layers)
+            load_adapter(args, list_adapter_layers)
 
         acc_test = evaluate(args, clip_model, test_loader, dataset)
         print(f"**** Test accuracy: {acc_test:.2f}. ****\n")
@@ -214,24 +164,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             optimizer.zero_grad()
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(optimizer_params, max_norm=1.0)
-            # ==================== DEBUG LOGS START ====================
-            # if count_iters < 5: # Chỉ kiểm tra ở vài bước đầu
-            #     print(f"\n--- DEBUG GRADIENTS (Iter {count_iters}) ---")
-            #     found_adapter = False
-            #     for name, param in clip_model.named_parameters():
-            #         # Chỉ kiểm tra gradient của các tham số adapter
-            #         if 'lora_A' in name and param.requires_grad:
-            #             if param.grad is not None:
-            #                 grad_norm = torch.linalg.norm(param.grad.float()).item()
-            #                 print(f"Gradient norm for {name}: {grad_norm:.6f}")
-            #             else:
-            #                 print(f"Gradient for {name} is None.")
-            #             found_adapter = True
-            #     if not found_adapter:
-            #         print("No adapter parameters found to check gradients.")
-            #     print(f"------------------------------------\n")
-            # ===================== DEBUG LOGS END =====================
-
             scaler.step(optimizer)
             scaler.update()
             scheduler.step()
@@ -261,6 +193,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
         if args.adapter == 'lora':
             save_lora(args, list_adapter_layers)
         elif args.adapter == 'singlora':
-            save_singlora(args, list_adapter_layers)
+            save_adapter(args, list_adapter_layers)
 
     return acc_test
