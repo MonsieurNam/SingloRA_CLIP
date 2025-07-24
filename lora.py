@@ -1,14 +1,14 @@
 # @title lora.py
+import time
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-import clip 
-import time
+import clip  # Giả sử thư mục clip đã có trong dự án
 
 from utils import *
 
 from loralib.utils import apply_lora, load_adapter, save_lora, load_lora, apply_adapter, mark_only_lora_as_trainable, get_lora_parameters, save_adapter
-
+# ==============================================================================
 
 
 def evaluate(args, clip_model, loader, dataset):
@@ -51,24 +51,13 @@ def evaluate(args, clip_model, loader, dataset):
 
 def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, test_loader):
     """
-    Hàm chính điều phối toàn bộ quy trình tinh chỉnh và đánh giá,
-    hỗ trợ cả LoRA và SingLoRA.
+    Hàm chính điều phối toàn bộ quy trình, giờ đây có thêm chức năng đo lường.
     """
-    
-    # ==============================================================================
-    # Đo VRAM khi load mô hình
-    # ==============================================================================
-    print("\n" + "="*60)
-    print("MEMORY MONITORING - MODEL LOADING")
-    print("="*60)
-    
-    # Reset và đo memory sau khi load model
-    clear_cache()
-    reset_peak_memory()
-    
-    # Move model to GPU và đo memory
-    clip_model = clip_model.cuda()
-    model_load_peak = print_memory_usage("Model Loading")
+
+    # ==================== BƯỚC ĐO LƯỜNG #1: PEAK VRAM KHI TẢI MÔ HÌNH ====================
+    # Reset bộ đếm bộ nhớ sau khi tất cả dữ liệu và mô hình đã được tải lên GPU
+    torch.cuda.reset_peak_memory_stats()
+    # (Hành động tải mô hình đã diễn ra trong main.py, chúng ta đo từ đây)
     
     # Textual features
     print("\nGetting textual features as CLIP's classifier.")
@@ -77,6 +66,11 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     # Pre-load test features để đánh giá zero-shot
     print("\nLoading visual features and labels from test set for zero-shot evaluation.")
     test_features, test_labels = pre_load_features(clip_model, test_loader)
+    
+    # Ghi lại Peak VRAM sau khi đã tải tất cả tensor cần thiết cho inference
+    peak_vram_loading = torch.cuda.max_memory_allocated() / (1024**3) # Chuyển sang GB
+    print(f"\n**** Peak VRAM after loading model and data: {peak_vram_loading:.2f} GB ****")
+    # =================================================================================
 
     test_features = test_features.cuda()
     test_labels = test_labels.cuda()
@@ -87,83 +81,50 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     print("\n**** Zero-shot CLIP's test accuracy: {:.2f}. ****\n".format(zs_acc))
 
     # Giải phóng bộ nhớ GPU
-    test_features = test_features.cpu()
-    test_labels = test_labels.cpu()
-    clear_cache()
+    del test_features, test_labels
+    torch.cuda.empty_cache()
 
-    # ==============================================================================
-    # Logic điều kiện để áp dụng Adapter
-    # ==============================================================================
-    print("\n" + "="*60)
-    print("MEMORY MONITORING - ADAPTER APPLICATION")
-    print("="*60)
-    
-    # Reset memory tracking cho adapter
-    reset_peak_memory()
-    
-    list_adapter_layers = []
+    # Áp dụng Adapter
     if args.adapter == 'lora':
-        print(f"Applying LoRA adapter with r={args.r}, alpha={args.alpha}...")
         list_adapter_layers = apply_lora(args, clip_model)
     elif args.adapter in ['singlora', 'dysinglora']:
-        print(f"Applying SingLoRA adapter with r={args.r}, alpha={args.alpha}, T={args.ramp_up_steps}...")
         list_adapter_layers = apply_adapter(args, clip_model)
     
-    adapter_peak = print_memory_usage("Adapter Application")
+    clip_model = clip_model.cuda()
 
     # Chế độ chỉ đánh giá (không huấn luyện)
     if args.eval_only:
         print(f"\nEvaluation-only mode for {args.adapter.upper()} adapter.")
         if args.adapter == 'lora':
             load_lora(args, list_adapter_layers)
-        elif args.adapter in ['singlora', 'dysinglora']:
+        elif args.adapter == 'singlora':
             load_adapter(args, list_adapter_layers)
 
         acc_test = evaluate(args, clip_model, test_loader, dataset)
         print(f"**** Test accuracy: {acc_test:.2f}. ****\n")
-        
-        # In tổng kết memory usage
-        print("\n" + "="*60)
-        print("MEMORY USAGE SUMMARY")
-        print("="*60)
-        print(f"Model Loading Peak VRAM: {model_load_peak:.2f} GB")
-        print(f"Adapter Application Peak VRAM: {adapter_peak:.2f} GB")
-        print("="*60)
-        
         return
 
-    # Đóng băng các tham số không phải của adapter
     mark_only_lora_as_trainable(clip_model)
-
-    # Thiết lập optimizer chỉ với các tham số của adapter
     optimizer_params = get_lora_parameters(clip_model)
     print(f"Number of trainable parameters: {sum(p.numel() for p in optimizer_params)}")
     optimizer = torch.optim.AdamW(optimizer_params, weight_decay=1e-2, betas=(0.9, 0.999), lr=args.lr)
 
-    # Thiết lập scheduler
     total_iters = args.n_iters * args.shots
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, total_iters, eta_min=1e-6)
 
-    # ==============================================================================
-    # Bắt đầu đo thời gian và VRAM cho quá trình fine-tuning
-    # ==============================================================================
-    print("\n" + "="*60)
-    print("MEMORY MONITORING - FINE-TUNING")
-    print("="*60)
-    
-    # Reset memory tracking cho fine-tuning
-    reset_peak_memory()
-    
-    # Bắt đầu đo thời gian fine-tuning
-    finetuning_start_time = time.time()
-    
     print(f"\nStarting {args.adapter.upper()} fine-tuning for {total_iters} iterations...")
+    
+    # ==================== ĐO LƯỜNG KHI HUẤN LUYỆN (LOGIC MỚI) ====================
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        torch.cuda.reset_peak_memory_stats()
+    
+    start_time = time.time()
+    vram_checked_after_first_step = False
+    # ========================================================================
+
     scaler = torch.amp.GradScaler(device='cuda')
     count_iters = 0
-    
-    # Variables để track memory usage trong quá trình training
-    training_peak_memory = 0
-    memory_check_interval = max(1, total_iters // 10)  # Check memory 10 lần trong quá trình training
 
     while count_iters < total_iters:
         clip_model.train()
@@ -171,7 +132,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
         tot_samples = 0
         loss_epoch = 0.
 
-        # Thiết lập text_features một lần nếu chỉ fine-tune vision encoder
         if args.encoder == 'vision':
             text_features_train = textual_features.clone().half()
 
@@ -217,12 +177,17 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             scaler.update()
             scheduler.step()
 
-            # Theo dõi memory usage định kỳ
-            if count_iters % memory_check_interval == 0:
-                current, peak = get_gpu_memory_usage()
-                training_peak_memory = max(training_peak_memory, peak)
-                if count_iters % (memory_check_interval * 2) == 0:  # Print less frequently
-                    print(f"[Training Progress] Iter {count_iters}/{total_iters}, Current VRAM: {current:.2f} GB, Peak: {peak:.2f} GB")
+            # ==================== ĐO LƯỜNG KHI HUẤN LUYỆN (LOGIC MỚI) ====================
+            # In ra VRAM đỉnh điểm ngay sau lần cập nhật đầu tiên
+            if not vram_checked_after_first_step:
+                if torch.cuda.is_available():
+                    torch.cuda.synchronize()
+                    peak_vram_first_step = torch.cuda.max_memory_allocated() / (1024**3)
+                    print(f"\n--- VRAM Checkpoint (During Training) ---")
+                    print(f"    Peak VRAM after first optimization step: {peak_vram_first_step:.3f} GB")
+                    print(f"-----------------------------------------\n")
+                vram_checked_after_first_step = True
+            # ========================================================================
 
             count_iters += 1
             if count_iters >= total_iters:
@@ -235,20 +200,25 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             current_lr = scheduler.get_last_lr()[0]
             print('LR: {:.6f}, Acc: {:.4f}, Loss: {:.4f}'.format(current_lr, acc_train, loss_epoch))
 
-    # Kết thúc đo thời gian fine-tuning
-    finetuning_end_time = time.time()
-    total_finetuning_time = finetuning_end_time - finetuning_start_time
+    # ==================== GHI NHẬN KẾT QUẢ ĐO LƯỜNG (LOGIC MỚI) ====================
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
     
-    # Đo peak memory cuối cùng của fine-tuning
-    finetuning_final_peak = print_memory_usage("Fine-tuning Complete")
-    training_peak_memory = max(training_peak_memory, finetuning_final_peak)
+    end_time = time.time()
+    total_finetuning_time = end_time - start_time
+    
+    # Lấy VRAM đỉnh điểm của toàn bộ quá trình huấn luyện
+    peak_vram_total_finetuning = 0
+    if torch.cuda.is_available():
+        peak_vram_total_finetuning = torch.cuda.max_memory_allocated() / (1024**3)
+
+    print("\n--- Final Resource Metrics (Finetuning Phase) ---")
+    print(f"Total Finetuning Time: {total_finetuning_time:.2f} seconds")
+    print(f"Peak VRAM during entire Finetuning: {peak_vram_total_finetuning:.3f} GB")
+    print("---------------------------------------------------\n")
+    # =================================================================================
 
     print("\nFine-tuning finished.")
-    print(f"Total Fine-tuning Time: {total_finetuning_time:.2f} seconds ({total_finetuning_time/60:.2f} minutes)")
-
-    # Đánh giá cuối cùng trên tập test
-    acc_test = evaluate(args, clip_model, test_loader, dataset)
-    print(f"**** Final test accuracy with {args.adapter.upper()}: {acc_test:.2f}. ****\n")
 
     # ==============================================================================
     # Logic điều kiện để lưu Adapter
@@ -259,18 +229,5 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             save_lora(args, list_adapter_layers)
         elif args.adapter == 'singlora':
             save_adapter(args, list_adapter_layers)
-
-    # ==============================================================================
-    # In tổng kết về memory usage và thời gian
-    # ==============================================================================
-    print("\n" + "="*60)
-    print("PERFORMANCE SUMMARY")
-    print("="*60)
-    print(f"Model Loading Peak VRAM: {model_load_peak:.2f} GB")
-    print(f"Adapter Application Peak VRAM: {adapter_peak:.2f} GB")
-    print(f"Fine-tuning Peak VRAM: {training_peak_memory:.2f} GB")
-    print(f"Total Fine-tuning Time: {total_finetuning_time:.2f} seconds ({total_finetuning_time/60:.2f} minutes)")
-    print(f"Final Test Accuracy: {acc_test:.2f}%")
-    print("="*60)
 
     return acc_test
