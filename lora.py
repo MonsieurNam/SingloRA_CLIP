@@ -1,4 +1,5 @@
 # @title lora.py
+
 import time
 import torch
 import torch.nn.functional as F
@@ -89,7 +90,7 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     # Áp dụng Adapter
     if args.adapter == 'lora':
         list_adapter_layers = apply_lora(args, clip_model)
-    elif args.adapter in ['singlora', 'dysinglora']:
+    elif args.adapter in ['singlora', 'dysinglora', 'mhsinglora']:
         list_adapter_layers = apply_adapter(args, clip_model)
     
     clip_model = clip_model.cuda()
@@ -99,7 +100,7 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
         print(f"\nEvaluation-only mode for {args.adapter.upper()} adapter.")
         if args.adapter == 'lora':
             load_lora(args, list_adapter_layers)
-        elif args.adapter == 'singlora':
+        elif args.adapter in ['singlora', 'dysinglora', 'mhsinglora']:
             load_adapter(args, list_adapter_layers)
 
         acc_test = evaluate(args, clip_model, test_loader, dataset)

@@ -1,12 +1,11 @@
 # @title loralib/utils.py
-
 import os
 import torch
 import torch.nn as nn
 from typing import Dict, List
 
 from .layers import LoRALayer, PlainMultiheadAttentionLoRA
-from .layers_singlora import PlainMultiheadAttentionSingLoRA, LinearSingLoRA, LinearDySingLoRA, PlainMultiheadAttentionAdapter
+from .layers_singlora import PlainMultiheadAttentionSingLoRA, LinearSingLoRA, LinearDySingLoRA, PlainMultiheadAttentionAdapter, LinearMHSingLoRA
 
 # Các từ điển này được sao chép từ loralib/utils.py để giữ nguyên logic
 INDEX_POSITIONS_TEXT = {
@@ -231,7 +230,8 @@ def apply_adapter(args, clip_model):
     # Map tên adapter từ args sang lớp tương ứng
     adapter_map = {
         'singlora': LinearSingLoRA,
-        'dysinglora': LinearDySingLoRA
+        'dysinglora': LinearDySingLoRA,
+        'mhsinglora': LinearMHSingLoRA
     }
 
     # Kiểm tra xem adapter có được hỗ trợ không
@@ -247,6 +247,13 @@ def apply_adapter(args, clip_model):
         'lora_alpha': args.alpha,
         'ramp_up_steps': args.ramp_up_steps
     }
+
+     # Thêm các tham số đặc thù cho từng loại adapter
+    if args.adapter == 'dysinglora':
+        # Mặc dù chưa có tham số riêng, nhưng đây là nơi để thêm trong tương lai
+        pass
+    elif args.adapter == 'mhsinglora':
+        adapter_kwargs['num_heads'] = args.num_heads
 
     # Lặp qua cả hai encoder
     for encoder_name in ['text', 'vision']:

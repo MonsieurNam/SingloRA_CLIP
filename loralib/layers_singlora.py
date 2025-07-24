@@ -253,7 +253,97 @@ class PlainMultiheadAttentionSingLoRA(nn.Module):
                 return attn_output, attn_weights
         else:
             return attn_output, None
-        
+       
+       
+class LinearMHSingLoRA(nn.Linear, SingLoRALayer):
+    """
+    Implements Multi-Head SingLoRA (MH-SingLoRA).
+
+    This adapter learns 'num_heads' smaller SingLoRA matrices (A_i) and sums
+    their outputs (A_i @ A_i.T). This increases the expressive power by
+    allowing each head to specialize, while keeping the total number of
+    trainable parameters the same as a standard SingLoRA layer.
+    """
+    def __init__(
+        self,
+        existing_linear: nn.Linear,
+        r: int = 0,
+        lora_alpha: int = 1,
+        ramp_up_steps: int = 1000,
+        num_heads: int = 2, # Siêu tham số mới, mặc định là 4
+        **kwargs
+    ):
+        # 1. Khởi tạo các lớp cha
+        nn.Linear.__init__(
+            self,
+            in_features=existing_linear.in_features,
+            out_features=existing_linear.out_features,
+            bias=existing_linear.bias is not None
+        )
+        SingLoRALayer.__init__(self, r=r, lora_alpha=lora_alpha, ramp_up_steps=ramp_up_steps)
+
+        # 2. Lưu lại các tham số và kiểm tra điều kiện
+        self.num_heads = num_heads
+        if self.r > 0:
+            assert r % num_heads == 0, f"Rank 'r' ({r}) must be divisible by 'num_heads' ({num_heads})."
+            self.rank_per_head = r // num_heads
+
+        # 3. Nạp trọng số và đăng ký buffer
+        self.register_buffer('training_step', torch.tensor(0, dtype=torch.long))
+        self.load_state_dict(existing_linear.state_dict(), strict=False)
+
+        if self.r > 0:
+            # 4. Đóng băng các trọng số gốc
+            self.weight.requires_grad = False
+            if self.bias is not None:
+                self.bias.requires_grad = False
+
+            # 5. Khởi tạo một tensor 3D cho tất cả các "đầu"
+            #    Tên chứa 'lora_' để các hàm tiện ích có thể nhận diện
+            self.lora_A_heads = nn.Parameter(
+                torch.zeros(
+                    self.num_heads,
+                    max(self.in_features, self.out_features),
+                    self.rank_per_head
+                )
+            )
+            # Sử dụng khởi tạo ổn định cho toàn bộ tensor
+            nn.init.normal_(self.lora_A_heads, std=0.01)
+
+    def forward(self, x: torch.Tensor, **kwargs):
+        dtype = x.dtype
+        weight = self.weight.to(dtype)
+        bias = self.bias.to(dtype) if self.bias is not None else None
+
+        if self.r == 0:
+            return F.linear(x, weight, bias)
+
+        original_output = F.linear(x, weight, bias)
+
+        if self.training:
+            self.step()
+
+        lora_A_heads = self.lora_A_heads.to(dtype)
+
+        # --- LOGIC CỦA MH-SING-LORA ---
+
+        # 1. Cắt tensor heads để có lora_A_in và lora_A_out cho tất cả các đầu cùng lúc
+        #    Shape: (h, max_dim, r/h) -> (h, out_dim, r/h) và (h, in_dim, r/h)
+        lora_A_heads_out = lora_A_heads[:, :self.out_features, :]
+        lora_A_heads_in = lora_A_heads[:, :self.in_features, :]
+
+        # 2. Tính delta_W cho tất cả các đầu bằng cách sử dụng batch matrix multiplication (bmm)
+        #    Đầu vào của bmm: (h, out, r/h) và (h, in, r/h). Cần chuyển vị cái thứ hai.
+        #    (h, out, r/h) @ (h, r/h, in) -> (h, out, in)
+        all_delta_W = lora_A_heads_out @ lora_A_heads_in.transpose(1, 2)
+
+        # 3. Cộng dồn tất cả các delta_W lại để có ma trận cập nhật cuối cùng
+        delta_W = torch.sum(all_delta_W, dim=0)
+
+        # 4. Tính toán bản cập nhật
+        lora_adjustment = F.linear(x, delta_W) * self.u() * self.scaling
+
+        return original_output + lora_adjustment 
 class LinearDySingLoRA(nn.Linear, SingLoRALayer):
     """
     Implements DyLoRA: A SingLoRA variant with dynamic, asymmetric scaling
@@ -371,9 +461,14 @@ class PlainMultiheadAttentionAdapter(nn.Module):
                 self.v_proj.bias.copy_(v_b)
             self.out_proj.load_state_dict(existing_mha.out_proj.state_dict())
 
-        # Thay thế bằng các lớp adapter được truyền vào
-        # Truyền tất cả các tham số cần thiết
-        adapter_kwargs = {'r': r, 'lora_alpha': lora_alpha, 'ramp_up_steps': ramp_up_steps}
+        adapter_kwargs = {
+            'r': r,
+            'lora_alpha': lora_alpha,
+            'ramp_up_steps': ramp_up_steps
+        }
+        
+        # 2. Cập nhật dict này với bất kỳ tham số bổ sung nào được truyền vào (như num_heads)
+        adapter_kwargs.update(kwargs)
 
         if 'q' in enable_lora:
             self.q_proj = linear_adapter_class(self.q_proj, **adapter_kwargs)

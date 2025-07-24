@@ -31,8 +31,13 @@ def get_arguments():
     # --- START OF MODIFICATIONS FOR PHASE 2 ---
 
     # General Adapter arguments
-    parser.add_argument('--adapter', type=str, default='lora', choices=['lora', 'singlora', 'dysinglora'],
-                        help='The type of adapter to use for fine-tuning.')
+    parser.add_argument('--adapter', type=str, default='lora',
+                    choices=['lora', 'singlora', 'dysinglora', 'mhsinglora'], # Thêm 'mhsinglora'
+                    help='The type of adapter to use.')
+
+    # Thêm tham số mới
+    parser.add_argument('--num_heads', type=int, default=2,
+                        help='[MH-SingLoRA only] Number of heads for the adapter.')
 
     # LoRA / SingLoRA arguments (shared)
     parser.add_argument('--position', type=str, default='all', choices=['bottom', 'mid', 'up', 'half-up', 'half-bottom', 'all', 'top3'],
