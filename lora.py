@@ -53,11 +53,11 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     """
     Hàm chính điều phối toàn bộ quy trình, giờ đây có thêm chức năng đo lường.
     """
-
-    # ==================== BƯỚC ĐO LƯỜNG #1: PEAK VRAM KHI TẢI MÔ HÌNH ====================
-    # Reset bộ đếm bộ nhớ sau khi tất cả dữ liệu và mô hình đã được tải lên GPU
-    torch.cuda.reset_peak_memory_stats()
-    # (Hành động tải mô hình đã diễn ra trong main.py, chúng ta đo từ đây)
+     # ==================== ĐO VRAM KHI TẢI ====================
+    print("\nMoving model and data to GPU for evaluation...")
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+        clip_model.cuda()
     
     # Textual features
     print("\nGetting textual features as CLIP's classifier.")
@@ -66,11 +66,13 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     # Pre-load test features để đánh giá zero-shot
     print("\nLoading visual features and labels from test set for zero-shot evaluation.")
     test_features, test_labels = pre_load_features(clip_model, test_loader)
-    
-    # Ghi lại Peak VRAM sau khi đã tải tất cả tensor cần thiết cho inference
-    peak_vram_loading = torch.cuda.max_memory_allocated() / (1024**3) # Chuyển sang GB
-    print(f"\n**** Peak VRAM after loading model and data: {peak_vram_loading:.2f} GB ****")
-    # =================================================================================
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+        peak_vram_loading = torch.cuda.max_memory_allocated() / (1024**3)
+        print(f"\n--- Resource Metrics (Loading Phase) ---")
+        print(f"    Peak VRAM for zero-shot eval setup: {peak_vram_loading:.3f} GB")
+        print(f"----------------------------------------\n")
+        
 
     test_features = test_features.cuda()
     test_labels = test_labels.cuda()
@@ -220,9 +222,8 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
 
     print("\nFine-tuning finished.")
 
-    # ==============================================================================
-    # Logic điều kiện để lưu Adapter
-    # ==============================================================================
+    acc_test = evaluate(args, clip_model, test_loader, dataset)
+    print(f"**** Final test accuracy with {args.adapter.upper()}: {acc_test:.2f}. ****\n")
     if args.save_path is not None:
         print(f"Saving {args.adapter.upper()} weights to {args.save_path}...")
         if args.adapter == 'lora':

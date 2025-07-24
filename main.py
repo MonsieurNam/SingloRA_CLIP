@@ -46,13 +46,6 @@ def main():
             train_loader = torch.utils.data.DataLoader(dataset.train_x, batch_size=args.batch_size, num_workers=8, shuffle=True, pin_memory=True)
         else:
             train_loader = build_data_loader(data_source=dataset.train_x, batch_size=args.batch_size, tfm=train_tranform, is_train=True, shuffle=True, num_workers=8)
-            
-    if torch.cuda.is_available():
-        torch.cuda.synchronize()
-        peak_vram_loading = torch.cuda.max_memory_allocated() / (1024**3)
-        print(f"\n--- Resource Metrics (Loading Phase) ---")
-        print(f"    Peak VRAM after loading model & data: {peak_vram_loading:.3f} GB")
-        print(f"----------------------------------------\n")
         
     run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, test_loader)
 

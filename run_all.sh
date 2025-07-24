@@ -13,7 +13,7 @@
 # --- PHẦN 1: CẤU HÌNH THỬ NGHIỆM ---
 
 # Các bộ dữ liệu cần chạy
-DATASETS=("eurosat" "oxford_flowers" "ucf101" "fgvc")
+DATASETS=("eurosat" "ucf101" "fgvc")
 
 # Số lượng shots cần chạy
 SHOTS=(16)

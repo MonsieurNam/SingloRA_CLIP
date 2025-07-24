@@ -59,9 +59,11 @@ INDEX_POSITIONS_VISION = {
 
 
 def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
+    # Đóng băng tất cả các tham số trước
     for n, p in model.named_parameters():
         p.requires_grad = False
     
+    # Mở khóa có chọn lọc cho các tham số adapter
     for n, p in model.named_parameters():
         if 'lora_' in n or 'scaler' in n:
             p.requires_grad = True
@@ -84,21 +86,9 @@ def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
 def get_lora_parameters(model, bias='none'):
     params = []
     for name, param in model.named_parameters():
-        if bias == 'none':
-            if 'lora_' in name:
-                params.append(param)
-        elif bias == 'all':
-            if 'lora_' in name or 'bias' in name:
-                params.append(param)
-        elif bias == 'lora_only':
-            if 'lora_' in name:
-                params.append(param)
-                bias_name = name.split('lora_')[0] + 'bias'
-                if bias_name in model.state_dict():
-                    bias_param = dict(model.named_parameters())[bias_name]
-                    params.append(bias_param)
-        else:
-            raise NotImplementedError
+        # Chỉ lấy các tham số đã được bật requires_grad
+        if param.requires_grad:
+            params.append(param)
     return params
 
 
