@@ -289,7 +289,6 @@ class LinearDySingLoRA(nn.Linear, SingLoRALayer):
             )
             nn.init.normal_(self.lora_A, std=0.01)
 
-            # 2. Thêm hai vector scaling có thể học được, khởi tạo bằng 1
             self.row_scaler = nn.Parameter(torch.ones(self.out_features))
             self.col_scaler = nn.Parameter(torch.ones(self.in_features))
 

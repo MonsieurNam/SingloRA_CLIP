@@ -7,7 +7,6 @@
 # Chức năng:
 # - Lặp qua các bộ dữ liệu và số lượng shots được chỉ định.
 # - Chạy thử nghiệm với một bộ siêu tham số CỐ ĐỊNH.
-# - Tự động trích xuất accuracy cuối cùng và lưu vào tệp summary.csv.
 #
 # ==============================================================================
 
@@ -20,7 +19,7 @@ DATASETS=("eurosat" "oxford_flowers" "ucf101" "fgvc")
 SHOTS=(16)
 
 # Cấu hình CỐ ĐỊNH cho tất cả các lần chạy
-ADAPTER_TYPE="singlora"
+ADAPTER_TYPE="dysinglora"
 LEARNING_RATE="2e-4"
 RANK=2
 ALPHA=1
@@ -34,19 +33,8 @@ ROOT_PATH="/root/DATA"
 SAVE_PATH="./checkpoints"
 
 # Thiết lập thư mục và tệp tổng hợp
-LOG_DIR="results_logs"
-SUMMARY_FILE="results_summary_${ADAPTER_TYPE}_r${RANK}_a${ALPHA}_lr${LEARNING_RATE}.csv" # Tên file summary rõ ràng hơn
+LOG_DIR="results_logs_${ADAPTER_TYPE}"
 mkdir -p $LOG_DIR
-
-
-# --- PHẦN 2: CHUẨN BỊ TỆP TỔNG HỢP ---
-
-# Kiểm tra xem tệp tổng hợp đã tồn tại chưa, nếu chưa thì tạo header
-if [ ! -f "$SUMMARY_FILE" ]; then
-    echo "Creating new summary file: ${SUMMARY_FILE}"
-    echo "Dataset,Shots,Final_Accuracy,Log_File" > $SUMMARY_FILE
-fi
-
 
 # --- PHẦN 3: VÒNG LẶP THỰC THI ---
 
@@ -107,11 +95,7 @@ for DATASET in "${DATASETS[@]}"; do
     echo "----------------------------------------------------------------------"
     echo ""
 
-    # Ghi kết quả vào tệp CSV
-    echo "${DATASET},${SHOT},${FINAL_ACC},${LOG_FILE}" >> $SUMMARY_FILE
-
   done
 done
 
 echo "All experiments finished."
-echo "Results summary saved to ${SUMMARY_FILE}"

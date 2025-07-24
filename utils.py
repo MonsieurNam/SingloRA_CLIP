@@ -1,6 +1,43 @@
 from tqdm import tqdm
 import torch
 import clip
+import gc
+
+
+def get_gpu_memory_usage():
+    """
+    Lấy thông tin sử dụng bộ nhớ GPU hiện tại.
+    Trả về: (allocated_memory_GB, max_memory_GB)
+    """
+    if torch.cuda.is_available():
+        allocated = torch.cuda.memory_allocated() / (1024**3)  # Convert to GB
+        max_allocated = torch.cuda.max_memory_allocated() / (1024**3)  # Convert to GB
+        return allocated, max_allocated
+    return 0, 0
+
+def reset_peak_memory():
+    """
+    Reset peak memory stats để đo chính xác cho từng giai đoạn.
+    """
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+
+def print_memory_usage(stage_name):
+    """
+    In thông tin sử dụng bộ nhớ cho một giai đoạn cụ thể.
+    """
+    current, peak = get_gpu_memory_usage()
+    print(f"[{stage_name}] Current VRAM: {current:.2f} GB, Peak VRAM: {peak:.2f} GB")
+    return peak
+
+def clear_cache():
+    """
+    Dọn dẹp cache GPU để có thông số chính xác hơn.
+    """
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+    gc.collect()
+
 
 def cls_acc(output, target, topk=1):
     pred = output.topk(topk, 1, True, True)[1].t()
