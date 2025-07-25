@@ -254,7 +254,106 @@ class PlainMultiheadAttentionSingLoRA(nn.Module):
         else:
             return attn_output, None
        
-       
+class LinearGMHSingLoRA(nn.Linear, SingLoRALayer):
+    """
+    Implements Gated Multi-Head SingLoRA (G-MHSingLoRA).
+
+    Each head's contribution is dynamically weighted by a gating network
+    that takes the input 'x' as context. This allows the adapter to
+    selectively use different "expert" heads for different inputs.
+    """
+    def __init__(
+        self,
+        existing_linear: nn.Linear,
+        r: int = 2,
+        lora_alpha: int = 1,
+        ramp_up_steps: int = 100,
+        num_heads: int = 2, # Siêu tham số số lượng đầu
+        **kwargs
+    ):
+        # 1. Khởi tạo các thành phần cơ bản
+        nn.Linear.__init__(
+            self,
+            in_features=existing_linear.in_features,
+            out_features=existing_linear.out_features,
+            bias=existing_linear.bias is not None
+        )
+        SingLoRALayer.__init__(self, r=r, lora_alpha=lora_alpha, ramp_up_steps=ramp_up_steps)
+        
+        # 2. Lưu lại các tham số và kiểm tra điều kiện
+        self.num_heads = num_heads
+        if self.r > 0:
+            assert r % num_heads == 0, f"Rank 'r' ({r}) must be divisible by 'num_heads' ({num_heads})."
+            self.rank_per_head = r // num_heads
+        
+        # 3. Nạp trọng số gốc và đăng ký buffer
+        self.register_buffer('training_step', torch.tensor(0, dtype=torch.long))
+        self.load_state_dict(existing_linear.state_dict(), strict=False)
+
+        if self.r > 0:
+            # 4. Đóng băng trọng số gốc
+            self.weight.requires_grad = False
+            if self.bias is not None:
+                self.bias.requires_grad = False
+            
+            # 5. Khởi tạo tensor 3D cho tất cả các "đầu"
+            self.lora_A_heads = nn.Parameter(
+                torch.zeros(
+                    self.num_heads,
+                    max(self.in_features, self.out_features),
+                    self.rank_per_head
+                )
+            )
+            nn.init.normal_(self.lora_A_heads, std=0.01)
+            
+            # 6. (MỚI) Khởi tạo mạng gating
+            #    Nó sẽ học cách chiếu đầu vào xuống một vector có `num_heads` chiều.
+            self.gating_network = nn.Sequential(
+                nn.Linear(self.in_features, self.num_heads, bias=False),
+                nn.Softmax(dim=-1)
+            )
+            # Khởi tạo trọng số của mạng gating bằng 0, để lúc đầu Softmax
+            # sẽ cho ra các trọng số bằng nhau (1/num_heads).
+            nn.init.zeros_(self.gating_network[0].weight)
+            
+    def forward(self, x: torch.Tensor, **kwargs):
+        dtype = x.dtype
+        weight = self.weight.to(dtype)
+        bias = self.bias.to(dtype) if self.bias is not None else None
+        
+        if self.r == 0:
+            return F.linear(x, weight, bias)
+
+        original_output = F.linear(x, weight, bias)
+        
+        if self.training:
+            self.step()
+        
+        # --- LOGIC G-MH-SING-LORA ĐƯỢC TỐI ƯU HÓA (VECTOR HÓA) ---
+        
+        # 1. Tính trọng số gating cho toàn bộ batch (không đổi)
+        #    x có shape (..., D_in)
+        #    gating_weights sẽ có shape (..., H) với H là num_heads
+        gating_weights = self.gating_network(x.detach().to(self.gating_network[0].weight.dtype))
+        gating_weights = gating_weights.to(dtype)
+
+        # 2. Chuẩn bị ma trận delta_W cho tất cả các đầu (không đổi)
+        lora_A_heads = self.lora_A_heads.to(dtype)
+        lora_A_heads_out = lora_A_heads[:, :self.out_features, :]
+        lora_A_heads_in = lora_A_heads[:, :self.in_features, :]
+        all_delta_W = lora_A_heads_out @ lora_A_heads_in.transpose(1, 2) # Shape: (H, D_out, D_in)
+
+        # 3. Tính toán lora_adjustment bằng torch.einsum (phép toán vector hóa)
+        #    'b...i' : đầu vào x (b... là các chiều batch, i là chiều in_features)
+        #    'hio'   : all_delta_W (h=head, i=in_features, o=out_features)
+        #    'b...h' : gating_weights (b... là các chiều batch, h là chiều head)
+        #    -> 'b...o' : kết quả đầu ra (b... là các chiều batch, o là chiều out_features)
+        lora_adjustment = torch.einsum('...i,hio,...h->...o', x, all_delta_W, gating_weights)
+        
+        # 4. Áp dụng scaling và ramp-up cuối cùng
+        final_adjustment = lora_adjustment * self.u() * self.scaling
+            
+        return original_output + final_adjustment
 class LinearMHSingLoRA(nn.Linear, SingLoRALayer):
     """
     Implements Multi-Head SingLoRA (MH-SingLoRA).

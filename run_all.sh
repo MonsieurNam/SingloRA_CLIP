@@ -11,23 +11,24 @@
 # ==============================================================================
 
 # --- PHẦN 1: CẤU HÌNH THỬ NGHIỆM ---
+# 'dtd', 'eurosat', 'caltech101', 'food101', 'oxford_pets', 'stanford_cars', 'oxford_flowers', 'sun397', 'ucf101', 'imagenet', 'fgvc'
 
 # Các bộ dữ liệu cần chạy
-DATASETS=("eurosat" "ucf101" "fgvc")
+DATASETS=('fgvc' 'dtd' 'eurosat' 'caltech101' 'food101' 'oxford_flowers' 'ucf101' 'oxford_pets' )
 
 # Số lượng shots cần chạy
-SHOTS=(16)
+SHOTS=(1)
 
 # Cấu hình CỐ ĐỊNH cho tất cả các lần chạy
-ADAPTER_TYPE="dysinglora"
+ADAPTER_TYPE="mhsinglora"
 LEARNING_RATE="2e-4"
 RANK=2
 ALPHA=1
-RAMP_UP_STEPS=400
+RAMP_UP_STEPS=100
 LORA_PARAMS="q k v"
 BASE_ITERS=500
 BATCH_SIZE=32
-
+NUM_HEADS=2
 # Đường dẫn
 ROOT_PATH="/root/DATA"
 SAVE_PATH="./checkpoints"
@@ -60,6 +61,7 @@ for DATASET in "${DATASETS[@]}"; do
       --root_path ${ROOT_PATH} \
       --shots ${SHOT} \
       --n_iters ${BASE_ITERS} \
+      --num_heads ${NUM_HEADS}\
       --batch_size ${BATCH_SIZE} \
       --adapter ${ADAPTER_TYPE} \
       --lr ${LEARNING_RATE} \

@@ -58,17 +58,21 @@ INDEX_POSITIONS_VISION = {
 
 
 def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
-    # Đóng băng tất cả các tham số trước
-    for n, p in model.named_parameters():
+    """
+    Đóng băng tất cả các tham số, sau đó chỉ mở khóa các tham số của adapter.
+    Đây là phiên bản an toàn nhất.
+    """
+    # Đóng băng tất cả
+    for p in model.parameters():
         p.requires_grad = False
     
-    # Mở khóa có chọn lọc cho các tham số adapter
+    # Mở khóa các thành phần của adapter
     for n, p in model.named_parameters():
-        if 'lora_' in n or 'scaler' in n:
+        if 'lora_' in n or 'scaler' in n or 'gating_network' in n:
             p.requires_grad = True
-    if bias == 'none':
-        return
-    elif bias == 'all':
+            
+    # Xử lý bias
+    if bias == 'all':
         for n, p in model.named_parameters():
             if 'bias' in n:
                 p.requires_grad = True
@@ -83,13 +87,12 @@ def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
 
 
 def get_lora_parameters(model, bias='none'):
-    params = []
-    for name, param in model.named_parameters():
-        # Chỉ lấy các tham số đã được bật requires_grad
-        if param.requires_grad:
-            params.append(param)
+    """
+    Thu thập tất cả các tham số có thể huấn luyện.
+    Cách tiếp cận đơn giản và mạnh mẽ nhất.
+    """
+    params = [p for p in model.parameters() if p.requires_grad]
     return params
-
 
 def apply_lora(args, clip_model):
     list_lora_layers = []
@@ -224,17 +227,16 @@ def load_lora(args, list_lora_layers):
 
 def apply_adapter(args, clip_model):
     """
-    Hàm chung để áp dụng bất kỳ loại adapter nào (SingLoRA, DySingLoRA)
-    vào mô hình CLIP.
+    Hàm chung để áp dụng bất kỳ loại adapter nào (SingLoRA, DySingLoRA, MH-SingLoRA, G-MHSingLoRA).
     """
     # Map tên adapter từ args sang lớp tương ứng
     adapter_map = {
         'singlora': LinearSingLoRA,
         'dysinglora': LinearDySingLoRA,
-        'mhsinglora': LinearMHSingLoRA
+        'mhsinglora': LinearMHSingLoRA,
+        'gmhsinglora': LinearGMHSingLoRA # <-- THÊM VÀO MAP
     }
 
-    # Kiểm tra xem adapter có được hỗ trợ không
     if args.adapter not in adapter_map:
         raise ValueError(f"Adapter type '{args.adapter}' is not supported by this function.")
 
@@ -248,11 +250,8 @@ def apply_adapter(args, clip_model):
         'ramp_up_steps': args.ramp_up_steps
     }
 
-     # Thêm các tham số đặc thù cho từng loại adapter
-    if args.adapter == 'dysinglora':
-        # Mặc dù chưa có tham số riêng, nhưng đây là nơi để thêm trong tương lai
-        pass
-    elif args.adapter == 'mhsinglora':
+    # Thêm các tham số đặc thù cho từng loại adapter
+    if args.adapter in ['mhsinglora', 'gmhsinglora']:
         adapter_kwargs['num_heads'] = args.num_heads
 
     # Lặp qua cả hai encoder
