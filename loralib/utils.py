@@ -5,7 +5,7 @@ import torch.nn as nn
 from typing import Dict, List
 
 from .layers import LoRALayer, PlainMultiheadAttentionLoRA
-from .layers_singlora import PlainMultiheadAttentionSingLoRA, LinearSingLoRA, LinearDySingLoRA, PlainMultiheadAttentionAdapter, LinearMHSingLoRA
+from .layers_singlora import  LinearSingLoRA,  PlainMultiheadAttentionAdapter, LinearGMHSingLoRA
 
 # Các từ điển này được sao chép từ loralib/utils.py để giữ nguyên logic
 INDEX_POSITIONS_TEXT = {
@@ -71,7 +71,8 @@ def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
         if 'lora_' in n or 'scaler' in n or 'gating_network' in n:
             p.requires_grad = True
             
-    # Xử lý bias
+    if bias == 'none':
+        return
     if bias == 'all':
         for n, p in model.named_parameters():
             if 'bias' in n:
@@ -232,8 +233,6 @@ def apply_adapter(args, clip_model):
     # Map tên adapter từ args sang lớp tương ứng
     adapter_map = {
         'singlora': LinearSingLoRA,
-        'dysinglora': LinearDySingLoRA,
-        'mhsinglora': LinearMHSingLoRA,
         'gmhsinglora': LinearGMHSingLoRA # <-- THÊM VÀO MAP
     }
 
@@ -251,7 +250,7 @@ def apply_adapter(args, clip_model):
     }
 
     # Thêm các tham số đặc thù cho từng loại adapter
-    if args.adapter in ['mhsinglora', 'gmhsinglora']:
+    if args.adapter in [ 'gmhsinglora']:
         adapter_kwargs['num_heads'] = args.num_heads
 
     # Lặp qua cả hai encoder

@@ -32,10 +32,9 @@ def get_arguments():
 
     # General Adapter arguments
     parser.add_argument('--adapter', type=str, default='lora', 
-                        choices=['lora', 'singlora', 'dysinglora', 'mhsinglora', 'gmhsinglora'], # Thêm 'gmhsinglora'
+                        choices=['lora', 'singlora', 'gmhsinglora'], # Thêm 'gmhsinglora'
                         help='The type of adapter to use for fine-tuning.')
     
-    # ... (các đối số chung khác không đổi) ...
     
     # MH-SingLoRA-specific arguments
     parser.add_argument('--num_heads', type=int, default=2,
