@@ -78,25 +78,6 @@ for DATASET in "${DATASETS[@]}"; do
 
     # Thực thi lệnh và ghi toàn bộ output (cả stdout và stderr) vào file log
     eval ${COMMAND} > ${LOG_FILE} 2>&1
-
-    # --- PHẦN 4: TRÍCH XUẤT VÀ LƯU KẾT QUẢ ---
-
-    # Tìm dòng cuối cùng chứa "Final test accuracy" trong file log
-    FINAL_ACC_LINE=$(grep "Final test accuracy" "${LOG_FILE}" | tail -n 1)
-
-    # Trích xuất số cuối cùng trong dòng, loại bỏ dấu chấm nếu có
-    FINAL_ACC=$(echo "$FINAL_ACC_LINE" | awk '{print $NF}' | sed 's/[[:punct:]]//g')
-
-    # Nếu không tìm thấy kết quả (do lỗi), ghi là "FAILED"
-    if [ -z "$FINAL_ACC" ]; then
-        FINAL_ACC="FAILED"
-    fi
-
-    echo "----------------------------------------------------------------------"
-    echo "Run finished for ${CONFIG_NAME}. Final Accuracy: ${FINAL_ACC}"
-    echo "----------------------------------------------------------------------"
-    echo ""
-
   done
 done
 
