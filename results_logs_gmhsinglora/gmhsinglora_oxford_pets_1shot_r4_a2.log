@@ -1,0 +1,98 @@
+Preparing dataset.
+Reading split from /root/DATA/OxfordPets/split_zhou_OxfordPets.json
+Creating a 1-shot dataset
+Creating a 1-shot dataset
+
+Moving model and data to GPU for evaluation...
+
+Getting textual features as CLIP's classifier.
+
+Loading visual features and labels from test set for zero-shot evaluation.
+  0%|          | 0/15 [00:00<?, ?it/s]  7%|▋         | 1/15 [00:02<00:28,  2.04s/it] 13%|█▎        | 2/15 [00:02<00:12,  1.05it/s] 20%|██        | 3/15 [00:02<00:06,  1.72it/s] 27%|██▋       | 4/15 [00:02<00:04,  2.33it/s] 33%|███▎      | 5/15 [00:02<00:03,  3.09it/s] 40%|████      | 6/15 [00:02<00:02,  3.85it/s] 47%|████▋     | 7/15 [00:02<00:01,  4.55it/s] 53%|█████▎    | 8/15 [00:03<00:01,  5.17it/s] 60%|██████    | 9/15 [00:03<00:01,  5.67it/s] 67%|██████▋   | 10/15 [00:03<00:00,  6.08it/s] 73%|███████▎  | 11/15 [00:03<00:00,  6.38it/s] 80%|████████  | 12/15 [00:03<00:00,  6.62it/s] 87%|████████▋ | 13/15 [00:03<00:00,  6.80it/s] 93%|█████████▎| 14/15 [00:03<00:00,  6.94it/s]100%|██████████| 15/15 [00:04<00:00,  3.73it/s]
+
+--- Resource Metrics (Loading Phase) ---
+    Peak VRAM for zero-shot eval setup: 1.715 GB
+----------------------------------------
+
+
+**** Zero-shot CLIP's test accuracy: 88.20. ****
+
+>> Applying GMHSINGLORA adapter...
+   Processing Text Encoder...
+   Processing Vision Encoder...
+Finished applying adapters.
+Number of trainable parameters: 276480
+
+Starting GMHSINGLORA fine-tuning for 500 iterations...
+Iter 0/500:   0%|          | 0/2 [00:00<?, ?it/s]/usr/local/lib/python3.10/dist-packages/torch/optim/lr_scheduler.py:182: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn(
+Iter 0/500:  50%|█████     | 1/2 [00:00<00:00,  2.27it/s]Iter 0/500: 100%|██████████| 2/2 [00:00<00:00,  4.05it/s]Iter 0/500: 100%|██████████| 2/2 [00:00<00:00,  3.46it/s]
+
+--- VRAM Checkpoint (During Training) ---
+    Peak VRAM after first optimization step: 5.415 GB
+-----------------------------------------
+
+LR: 0.000200, Acc: 75.6757, Loss: 1.1317
+Iter 2/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 2/500:  50%|█████     | 1/2 [00:00<00:00,  2.71it/s]Iter 2/500: 100%|██████████| 2/2 [00:00<00:00,  4.62it/s]Iter 2/500: 100%|██████████| 2/2 [00:00<00:00,  3.98it/s]
+LR: 0.000200, Acc: 67.5676, Loss: 1.1230
+Iter 4/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 4/500:  50%|█████     | 1/2 [00:00<00:00,  2.84it/s]Iter 4/500: 100%|██████████| 2/2 [00:00<00:00,  4.78it/s]Iter 4/500: 100%|██████████| 2/2 [00:00<00:00,  4.05it/s]
+LR: 0.000200, Acc: 70.2703, Loss: 0.9166
+Iter 6/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 6/500:  50%|█████     | 1/2 [00:00<00:00,  2.95it/s]Iter 6/500: 100%|██████████| 2/2 [00:00<00:00,  4.92it/s]Iter 6/500: 100%|██████████| 2/2 [00:00<00:00,  4.24it/s]
+LR: 0.000200, Acc: 67.5676, Loss: 0.9635
+Iter 8/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 8/500:  50%|█████     | 1/2 [00:00<00:00,  2.77it/s]Iter 8/500: 100%|██████████| 2/2 [00:00<00:00,  4.69it/s]Iter 8/500: 100%|██████████| 2/2 [00:00<00:00,  4.03it/s]
+LR: 0.000200, Acc: 62.1622, Loss: 0.8758
+Iter 10/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 10/500:  50%|█████     | 1/2 [00:00<00:00,  2.86it/s]Iter 10/500: 100%|██████████| 2/2 [00:00<00:00,  4.82it/s]Iter 10/500: 100%|██████████| 2/2 [00:00<00:00,  4.13it/s]
+LR: 0.000200, Acc: 70.2703, Loss: 1.0366
+Iter 12/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 12/500:  50%|█████     | 1/2 [00:00<00:00,  2.95it/s]Iter 12/500: 100%|██████████| 2/2 [00:00<00:00,  4.90it/s]Iter 12/500: 100%|██████████| 2/2 [00:00<00:00,  4.17it/s]
+LR: 0.000200, Acc: 70.2703, Loss: 1.1344
+Iter 14/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 14/500:  50%|█████     | 1/2 [00:00<00:00,  2.94it/s]Iter 14/500: 100%|██████████| 2/2 [00:00<00:00,  4.92it/s]Iter 14/500: 100%|██████████| 2/2 [00:00<00:00,  4.24it/s]
+LR: 0.000199, Acc: 67.5676, Loss: 0.9766
+Iter 16/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 16/500:  50%|█████     | 1/2 [00:00<00:00,  2.96it/s]Iter 16/500: 100%|██████████| 2/2 [00:00<00:00,  4.92it/s]Iter 16/500: 100%|██████████| 2/2 [00:00<00:00,  4.23it/s]
+LR: 0.000199, Acc: 70.2703, Loss: 0.9705
+Iter 18/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 18/500:  50%|█████     | 1/2 [00:00<00:00,  2.81it/s]Iter 18/500: 100%|██████████| 2/2 [00:00<00:00,  4.77it/s]Iter 18/500: 100%|██████████| 2/2 [00:00<00:00,  4.08it/s]
+LR: 0.000199, Acc: 67.5676, Loss: 0.8121
+Iter 20/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 20/500:  50%|█████     | 1/2 [00:00<00:00,  2.84it/s]Iter 20/500: 100%|██████████| 2/2 [00:00<00:00,  4.80it/s]Iter 20/500: 100%|██████████| 2/2 [00:00<00:00,  4.15it/s]
+LR: 0.000199, Acc: 75.6757, Loss: 0.9567
+Iter 22/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 22/500:  50%|█████     | 1/2 [00:00<00:00,  2.86it/s]Iter 22/500: 100%|██████████| 2/2 [00:00<00:00,  4.82it/s]Iter 22/500: 100%|██████████| 2/2 [00:00<00:00,  4.15it/s]
+LR: 0.000199, Acc: 75.6757, Loss: 1.0589
+Iter 24/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 24/500:  50%|█████     | 1/2 [00:00<00:00,  2.79it/s]Iter 24/500: 100%|██████████| 2/2 [00:00<00:00,  4.79it/s]Iter 24/500: 100%|██████████| 2/2 [00:00<00:00,  4.12it/s]
+LR: 0.000199, Acc: 62.1622, Loss: 0.9060
+Iter 26/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 26/500:  50%|█████     | 1/2 [00:00<00:00,  2.78it/s]Iter 26/500: 100%|██████████| 2/2 [00:00<00:00,  4.76it/s]Iter 26/500: 100%|██████████| 2/2 [00:00<00:00,  4.05it/s]
+LR: 0.000198, Acc: 70.2703, Loss: 1.1110
+Iter 28/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 28/500:  50%|█████     | 1/2 [00:00<00:00,  2.57it/s]Iter 28/500: 100%|██████████| 2/2 [00:00<00:00,  4.28it/s]Iter 28/500: 100%|██████████| 2/2 [00:00<00:00,  3.67it/s]
+LR: 0.000198, Acc: 72.9730, Loss: 0.8260
+Iter 30/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 30/500:  50%|█████     | 1/2 [00:00<00:00,  2.48it/s]Iter 30/500: 100%|██████████| 2/2 [00:00<00:00,  4.39it/s]Iter 30/500: 100%|██████████| 2/2 [00:00<00:00,  3.73it/s]
+LR: 0.000198, Acc: 64.8649, Loss: 0.9752
+Iter 32/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 32/500:  50%|█████     | 1/2 [00:00<00:00,  2.86it/s]Iter 32/500: 100%|██████████| 2/2 [00:00<00:00,  4.88it/s]Iter 32/500: 100%|██████████| 2/2 [00:00<00:00,  4.13it/s]
+LR: 0.000198, Acc: 70.2703, Loss: 1.0158
+Iter 34/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 34/500:  50%|█████     | 1/2 [00:00<00:00,  2.87it/s]Iter 34/500: 100%|██████████| 2/2 [00:00<00:00,  4.88it/s]Iter 34/500: 100%|██████████| 2/2 [00:00<00:00,  4.20it/s]
+LR: 0.000197, Acc: 75.6757, Loss: 0.6950
+Iter 36/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 36/500:  50%|█████     | 1/2 [00:00<00:00,  2.93it/s]Iter 36/500: 100%|██████████| 2/2 [00:00<00:00,  4.97it/s]Iter 36/500: 100%|██████████| 2/2 [00:00<00:00,  4.26it/s]
+LR: 0.000197, Acc: 78.3784, Loss: 0.7831
+Iter 38/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 38/500:  50%|█████     | 1/2 [00:00<00:00,  2.78it/s]Iter 38/500: 100%|██████████| 2/2 [00:00<00:00,  4.79it/s]Iter 38/500: 100%|██████████| 2/2 [00:00<00:00,  4.12it/s]
+LR: 0.000197, Acc: 70.2703, Loss: 0.7854
+Iter 40/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 40/500:  50%|█████     | 1/2 [00:00<00:00,  2.92it/s]Iter 40/500: 100%|██████████| 2/2 [00:00<00:00,  4.95it/s]Iter 40/500: 100%|██████████| 2/2 [00:00<00:00,  4.24it/s]
+LR: 0.000197, Acc: 78.3784, Loss: 0.9928
+Iter 42/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 42/500:  50%|█████     | 1/2 [00:00<00:00,  2.96it/s]Iter 42/500: 100%|██████████| 2/2 [00:00<00:00,  4.98it/s]Iter 42/500: 100%|██████████| 2/2 [00:00<00:00,  4.25it/s]
+LR: 0.000196, Acc: 81.0811, Loss: 0.6967
+Iter 44/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 44/500:  50%|█████     | 1/2 [00:00<00:00,  2.95it/s]Iter 44/500: 100%|██████████| 2/2 [00:00<00:00,  5.00it/s]Iter 44/500: 100%|██████████| 2/2 [00:00<00:00,  4.29it/s]
+LR: 0.000196, Acc: 83.7838, Loss: 0.5106
+Iter 46/500:   0%|          | 0/2 [00:00<?, ?it/s]Iter 46/500:   0%|          | 0/2 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/root/SingloRA_CLIP/main.py", line 53, in <module>
+    main()
+  File "/root/SingloRA_CLIP/main.py", line 50, in main
+    run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, test_loader)
+  File "/root/SingloRA_CLIP/lora.py", line 177, in run_lora
+    scaler.scale(loss).backward()
+  File "/usr/local/lib/python3.10/dist-packages/torch/_tensor.py", line 648, in backward
+    torch.autograd.backward(
+  File "/usr/local/lib/python3.10/dist-packages/torch/autograd/__init__.py", line 353, in backward
+    _engine_run_backward(
+  File "/usr/local/lib/python3.10/dist-packages/torch/autograd/graph.py", line 824, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+RuntimeError: CUDA error: an illegal memory access was encountered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+

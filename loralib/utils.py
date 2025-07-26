@@ -298,7 +298,7 @@ def save_adapter(args, model):
     # Thu thập các tham số cần lưu từ state_dict của mô hình
     for name, param in model.state_dict().items():
         # Dựa vào quy ước đặt tên để xác định tham số của adapter
-        if 'lora_' in name or 'scaler' in name:
+        if 'lora_' in name or 'gating_network' in name:
             adapter_state_dict[name] = param
 
     # Tạo metadata để xác minh khi tải

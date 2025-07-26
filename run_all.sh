@@ -76,7 +76,6 @@ for DATASET in "${DATASETS[@]}"; do
     echo "${COMMAND}"
     echo ""
 
-    # Thực thi lệnh và ghi toàn bộ output (cả stdout và stderr) vào file log
     eval ${COMMAND} > ${LOG_FILE} 2>&1
   done
 done

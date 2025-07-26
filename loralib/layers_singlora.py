@@ -26,9 +26,8 @@ class SingLoRALayer:
         r: int,
         lora_alpha: int,
         ramp_up_steps: int,
-        **kwargs # Thêm **kwargs để nhận các tham số thừa từ super()
+        **kwargs 
     ):
-        # Không còn super().__init__() ở đây
         self.r = r
         self.lora_alpha = lora_alpha
         self.ramp_up_steps = ramp_up_steps
@@ -36,8 +35,6 @@ class SingLoRALayer:
         if self.r > 0:
             self.scaling = self.lora_alpha / math.sqrt(self.r)
 
-        # training_step sẽ được đăng ký trong lớp con (LinearSingLoRA)
-        # vì lớp này không phải là nn.Module
 
     def u(self) -> float:
         if self.ramp_up_steps == 0:
@@ -77,14 +74,9 @@ class LinearSingLoRA(nn.Linear, SingLoRALayer):
 
             self.lora_A = nn.Parameter(torch.zeros(self.out_features, self.r))
 
-            # ==================== THAY ĐỔI CUỐI CÙNG ====================
-            # Khởi tạo A từ phân phối chuẩn với độ lệch chuẩn RẤT NHỎ
-            # thay vì Kaiming. Điều này làm cho A @ A.T lúc đầu gần bằng 0.
             nn.init.normal_(self.lora_A, std=0.01)
-            # ==========================================================
 
     def forward(self, x: torch.Tensor, **kwargs):
-        # Chuyển dtype để tương thích
         dtype = x.dtype
         weight = self.weight.to(dtype)
         bias = self.bias.to(dtype) if self.bias is not None else None
@@ -99,22 +91,18 @@ class LinearSingLoRA(nn.Linear, SingLoRALayer):
 
         lora_A = self.lora_A.to(dtype)
 
-        # ==================== THAY ĐỔI CUỐI CÙNG (CÔNG THỨC) =================
-        # Loại bỏ hoàn toàn heuristic chuẩn hóa
-        # Và giữ nguyên công thức gốc A @ A.T
         delta_W = lora_A @ lora_A.T
         delta_W_raw = self.lora_A @ self.lora_A.T
-        if self.training and self.training_step % 50 == 0: # In mỗi 50 bước
+        if self.training and self.training_step % 50 == 0:
           with torch.no_grad():
               w0_flat = self.weight.float().flatten()
               dw_flat = delta_W_raw.float().flatten()
-              # Tính cosin tương đồng
               cosine_sim = F.cosine_similarity(w0_flat, dw_flat, dim=0).item()
               # print(f"Cosine Similarity (W₀, ΔW): {cosine_sim:.6f}")
 
         lora_adjustment = F.linear(x, delta_W) * self.u() * self.scaling
         # ===================================================================
-        # if self.training and self.training_step % 50 == 0: # In mỗi 50 bước
+        # if self.training and self.training_step % 50 == 0: 
         #     print(f"\n--- LOG (Step {self.training_step.item()}) ---")
         #     print(f"Norm of lora_A: {torch.linalg.norm(self.lora_A.float()).item():.6f}")
         #     print(f"---------------------------\n")
@@ -146,14 +134,12 @@ class PlainMultiheadAttentionSingLoRA(nn.Module):
         self.batch_first = existing_mha.batch_first
         self.dropout = existing_mha.dropout
 
-        # Deconstruct and replace layers
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=existing_mha.in_proj_bias is not None)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=existing_mha.in_proj_bias is not None)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=existing_mha.in_proj_bias is not None)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=existing_mha.out_proj.bias is not None)
 
         with torch.no_grad():
-            # Tách trọng số từ in_proj_weight của MHA gốc
             q_w, k_w, v_w = existing_mha.in_proj_weight.chunk(3)
             self.q_proj.weight.copy_(q_w)
             self.k_proj.weight.copy_(k_w)
@@ -167,7 +153,6 @@ class PlainMultiheadAttentionSingLoRA(nn.Module):
 
             self.out_proj.load_state_dict(existing_mha.out_proj.state_dict())
 
-        # Thay thế bằng các lớp SingLoRA
         if 'q' in enable_lora:
             self.q_proj = LinearSingLoRA(self.q_proj, r, lora_alpha, ramp_up_steps)
         if 'k' in enable_lora:
@@ -188,64 +173,45 @@ class PlainMultiheadAttentionSingLoRA(nn.Module):
         average_attn_weights: bool = True,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
 
-        # Xử lý batch_first
         if self.batch_first:
             query, key, value = [x.transpose(0, 1) for x in (query, key, value)]
 
-        # Lấy kích thước
         tgt_len, bsz, embed_dim = query.shape
         src_len = key.shape[0]
 
-        # 1. Chiếu Q, K, V -> Đây là nơi logic SingLoRA được áp dụng
         q = self.q_proj(query)
         k = self.k_proj(key)
         v = self.v_proj(value)
 
-        # 2. Reshape cho multi-head attention
         q = q.view(tgt_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
         k = k.view(src_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
         v = v.view(src_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
-        # Shape bây giờ là (bsz, num_heads, seq_len, head_dim)
 
-        # 3. Tính điểm attention
-        # (bsz, num_heads, tgt_len, head_dim) @ (bsz, num_heads, head_dim, src_len)
         attn_scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
 
-        # 4. Áp dụng các mặt nạ
         if attn_mask is not None:
-            # attn_mask có thể là (tgt_len, src_len) hoặc (bsz*num_heads, tgt_len, src_len)
-            # Chúng ta cần đảm bảo nó có thể broadcast được
             if attn_mask.dim() == 2:
                 attn_scores += attn_mask.unsqueeze(0).unsqueeze(0)
             else:
-                # Nếu là 3D, nó có thể đã được chuẩn bị sẵn
                 attn_scores += attn_mask
 
         if key_padding_mask is not None:
-            # key_padding_mask (bsz, src_len)
-            # unsqueeze để nó broadcast được với attn_scores (bsz, num_heads, tgt_len, src_len)
             attn_scores = attn_scores.masked_fill(
                 key_padding_mask.unsqueeze(1).unsqueeze(2), float("-inf")
             )
 
-        # 5. Softmax và Dropout
         attn_weights = F.softmax(attn_scores, dim=-1)
         attn_weights = F.dropout(attn_weights, p=self.dropout, training=self.training)
 
-        # 6. Tính đầu ra
-        attn_output = attn_weights @ v # (bsz, num_heads, tgt_len, head_dim)
+        attn_output = attn_weights @ v 
 
-        # 7. Reshape và chiếu đầu ra
         attn_output = attn_output.permute(2, 0, 1, 3).contiguous().view(tgt_len, bsz, embed_dim)
         attn_output = self.out_proj(attn_output)
 
-        # Xử lý batch_first cho đầu ra
         if self.batch_first:
             attn_output = attn_output.transpose(0, 1)
 
-        # Trả về kết quả
         if need_weights:
-            # Xử lý average_attn_weights
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             if average_attn_weights:
                 return attn_output, attn_weights.sum(dim=1) / self.num_heads
@@ -268,10 +234,9 @@ class LinearGMHSingLoRA(nn.Linear, SingLoRALayer):
         r: int = 2,
         lora_alpha: int = 1,
         ramp_up_steps: int = 100,
-        num_heads: int = 2, # Siêu tham số số lượng đầu
+        num_heads: int = 2,
         **kwargs
     ):
-        # 1. Khởi tạo các thành phần cơ bản
         nn.Linear.__init__(
             self,
             in_features=existing_linear.in_features,
@@ -280,23 +245,19 @@ class LinearGMHSingLoRA(nn.Linear, SingLoRALayer):
         )
         SingLoRALayer.__init__(self, r=r, lora_alpha=lora_alpha, ramp_up_steps=ramp_up_steps)
         
-        # 2. Lưu lại các tham số và kiểm tra điều kiện
         self.num_heads = num_heads
         if self.r > 0:
             assert r % num_heads == 0, f"Rank 'r' ({r}) must be divisible by 'num_heads' ({num_heads})."
             self.rank_per_head = r // num_heads
         
-        # 3. Nạp trọng số gốc và đăng ký buffer
         self.register_buffer('training_step', torch.tensor(0, dtype=torch.long))
         self.load_state_dict(existing_linear.state_dict(), strict=False)
 
         if self.r > 0:
-            # 4. Đóng băng trọng số gốc
             self.weight.requires_grad = False
             if self.bias is not None:
                 self.bias.requires_grad = False
             
-            # 5. Khởi tạo tensor 3D cho tất cả các "đầu"
             self.lora_A_heads = nn.Parameter(
                 torch.zeros(
                     self.num_heads,
@@ -306,14 +267,10 @@ class LinearGMHSingLoRA(nn.Linear, SingLoRALayer):
             )
             nn.init.normal_(self.lora_A_heads, std=0.01)
             
-            # 6. (MỚI) Khởi tạo mạng gating
-            #    Nó sẽ học cách chiếu đầu vào xuống một vector có `num_heads` chiều.
             self.gating_network = nn.Sequential(
                 nn.Linear(self.in_features, self.num_heads, bias=False),
                 nn.Softmax(dim=-1)
             )
-            # Khởi tạo trọng số của mạng gating bằng 0, để lúc đầu Softmax
-            # sẽ cho ra các trọng số bằng nhau (1/num_heads).
             nn.init.zeros_(self.gating_network[0].weight)
             
     def forward(self, x: torch.Tensor, **kwargs):
@@ -329,35 +286,17 @@ class LinearGMHSingLoRA(nn.Linear, SingLoRALayer):
         if self.training:
             self.step()
         
-        # --- LOGIC G-MH-SING-LORA ĐƯỢC TỐI ƯU HÓA (VECTOR HÓA) ---
-        
-        # 1. Tính trọng số gating cho toàn bộ batch (không đổi)
-        #    x có shape (..., D_in)
-        #    gating_weights sẽ có shape (..., H) với H là num_heads
         gating_weights = self.gating_network(x.detach().to(self.gating_network[0].weight.dtype))
         gating_weights = gating_weights.to(dtype)
 
-        # 2. Chuẩn bị ma trận delta_W cho tất cả các đầu (không đổi)
         lora_A_heads = self.lora_A_heads.to(dtype)
         lora_A_heads_out = lora_A_heads[:, :self.out_features, :]
         lora_A_heads_in = lora_A_heads[:, :self.in_features, :]
-        all_delta_W = lora_A_heads_out @ lora_A_heads_in.transpose(1, 2) # Shape: (H, D_out, D_in)
-
-        # 3. Tính toán lora_adjustment bằng torch.einsum (phép toán vector hóa)
-        #    'b...i' : đầu vào x (b... là các chiều batch, i là chiều in_features)
-        #    'hio'   : all_delta_W (h=head, i=in_features, o=out_features)
-        #    'b...h' : gating_weights (b... là các chiều batch, h là chiều head)
-        #    -> 'b...o' : kết quả đầu ra (b... là các chiều batch, o là chiều out_features)
+        all_delta_W = lora_A_heads_out @ lora_A_heads_in.transpose(1, 2) 
         lora_adjustment = torch.einsum('...i,hio,...h->...o', x, all_delta_W, gating_weights)
-        
-        # 4. Áp dụng scaling và ramp-up cuối cùng
         final_adjustment = lora_adjustment * self.u() * self.scaling
             
         return original_output + final_adjustment
-
-# ------------------------------------------------------------------------------
-# Tái cấu trúc PlainMultiheadAttention... để linh hoạt hơn
-# ------------------------------------------------------------------------------
 
 class PlainMultiheadAttentionAdapter(nn.Module):
     """
@@ -366,7 +305,7 @@ class PlainMultiheadAttentionAdapter(nn.Module):
     def __init__(
             self,
             existing_mha: nn.MultiheadAttention,
-            linear_adapter_class, # Tham số mới: lớp adapter sẽ được sử dụng
+            linear_adapter_class, 
             r: int = 0,
             lora_alpha: int = 1,
             ramp_up_steps: int = 1000,
@@ -377,13 +316,11 @@ class PlainMultiheadAttentionAdapter(nn.Module):
 
         self.embed_dim = existing_mha.embed_dim
         self.num_heads = existing_mha.num_heads
-        # ... (code sao chép các thuộc tính khác không đổi) ...
         self.head_dim = self.embed_dim // self.num_heads
         assert self.head_dim * self.num_heads == self.embed_dim, "embed_dim must be divisible by num_heads"
         self.batch_first = existing_mha.batch_first
         self.dropout = existing_mha.dropout
 
-        # Tách và sao chép trọng số (không đổi)
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=existing_mha.in_proj_bias is not None)
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=existing_mha.in_proj_bias is not None)
         self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=existing_mha.in_proj_bias is not None)
@@ -406,7 +343,6 @@ class PlainMultiheadAttentionAdapter(nn.Module):
             'ramp_up_steps': ramp_up_steps
         }
         
-        # 2. Cập nhật dict này với bất kỳ tham số bổ sung nào được truyền vào (như num_heads)
         adapter_kwargs.update(kwargs)
 
         if 'q' in enable_lora:
@@ -434,20 +370,16 @@ class PlainMultiheadAttentionAdapter(nn.Module):
             tgt_len, bsz, embed_dim = query.shape
             src_len = key.shape[0]
 
-            # 1. Project Q, K, V -> This is where the SingLoRA logic is applied
             q = self.q_proj(query)
             k = self.k_proj(key)
             v = self.v_proj(value)
 
-            # 2. Reshape for multi-head attention
             q = q.view(tgt_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
             k = k.view(src_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
             v = v.view(src_len, bsz, self.num_heads, self.head_dim).permute(1, 2, 0, 3)
 
-            # 3. Compute attention scores
             attn_scores = (q @ k.transpose(-2, -1)) / math.sqrt(self.head_dim)
 
-            # 4. Apply masks
             if attn_mask is not None:
                 if attn_mask.dim() == 2:
                     attn_scores += attn_mask.unsqueeze(0).unsqueeze(0)
@@ -459,14 +391,11 @@ class PlainMultiheadAttentionAdapter(nn.Module):
                     key_padding_mask.unsqueeze(1).unsqueeze(2), float("-inf")
                 )
 
-            # 5. Softmax and Dropout
             attn_weights = F.softmax(attn_scores, dim=-1, dtype=torch.float32).to(q.dtype)
             attn_weights = F.dropout(attn_weights, p=self.dropout, training=self.training)
 
-            # 6. Compute final output
             attn_output = attn_weights @ v
 
-            # 7. Reshape and project output
             attn_output = attn_output.permute(2, 0, 1, 3).contiguous().view(tgt_len, bsz, embed_dim)
             attn_output = self.out_proj(attn_output)
 

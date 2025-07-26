@@ -229,7 +229,7 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
         print(f"Saving {args.adapter.upper()} weights to {args.save_path}...")
         if args.adapter == 'lora':
             save_lora(args, list_adapter_layers)
-        elif args.adapter == 'singlora':
-            save_adapter(args, list_adapter_layers)
+        elif args.adapter in ['singlora', 'gmhsinglora']:
+            save_adapter(args, clip_model)
 
     return acc_test
