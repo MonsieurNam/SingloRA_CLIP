@@ -1,0 +1,66 @@
+Preparing dataset.
+Reading split from /root/DATA/Caltech101/split_zhou_Caltech101.json
+Creating a 1-shot dataset
+Creating a 1-shot dataset
+
+Moving model and data to GPU for evaluation...
+
+Getting textual features as CLIP's classifier.
+
+Loading visual features and labels from test set for zero-shot evaluation.
+  0%|          | 0/10 [00:00<?, ?it/s] 10%|█         | 1/10 [00:01<00:14,  1.62s/it] 20%|██        | 2/10 [00:01<00:05,  1.34it/s] 30%|███       | 3/10 [00:01<00:03,  2.13it/s] 40%|████      | 4/10 [00:02<00:02,  2.96it/s] 50%|█████     | 5/10 [00:02<00:01,  3.77it/s] 60%|██████    | 6/10 [00:02<00:00,  4.51it/s] 70%|███████   | 7/10 [00:02<00:00,  5.15it/s] 80%|████████  | 8/10 [00:02<00:00,  5.68it/s] 90%|█████████ | 9/10 [00:02<00:00,  6.09it/s]100%|██████████| 10/10 [00:02<00:00,  3.54it/s]
+
+--- Resource Metrics (Loading Phase) ---
+    Peak VRAM for zero-shot eval setup: 1.715 GB
+----------------------------------------
+
+
+**** Zero-shot CLIP's test accuracy: 93.31. ****
+
+>> Applying SINGLORA adapter...
+   Processing Text Encoder...
+   Processing Vision Encoder...
+Finished applying adapters.
+Number of trainable parameters: 184320
+
+Starting SINGLORA fine-tuning for 500 iterations...
+Iter 0/500:   0%|          | 0/4 [00:00<?, ?it/s]/usr/local/lib/python3.10/dist-packages/torch/optim/lr_scheduler.py:182: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn(
+Iter 0/500:  25%|██▌       | 1/4 [00:00<00:01,  2.89it/s]Iter 0/500:  50%|█████     | 2/4 [00:00<00:00,  4.93it/s]Iter 0/500:  75%|███████▌  | 3/4 [00:00<00:00,  6.05it/s]Iter 0/500: 100%|██████████| 4/4 [00:00<00:00,  5.94it/s]
+
+--- VRAM Checkpoint (During Training) ---
+    Peak VRAM after first optimization step: 5.191 GB
+-----------------------------------------
+
+LR: 0.000200, Acc: 78.0000, Loss: 0.9058
+Iter 4/500:   0%|          | 0/4 [00:00<?, ?it/s]Iter 4/500:  25%|██▌       | 1/4 [00:00<00:00,  4.22it/s]Iter 4/500:  50%|█████     | 2/4 [00:00<00:00,  6.37it/s]Iter 4/500:  75%|███████▌  | 3/4 [00:00<00:00,  7.61it/s]Iter 4/500: 100%|██████████| 4/4 [00:00<00:00,  7.47it/s]
+LR: 0.000200, Acc: 73.0000, Loss: 0.8941
+Iter 8/500:   0%|          | 0/4 [00:00<?, ?it/s]Iter 8/500:  25%|██▌       | 1/4 [00:00<00:00,  4.22it/s]Iter 8/500:  50%|█████     | 2/4 [00:00<00:00,  6.38it/s]Iter 8/500:  75%|███████▌  | 3/4 [00:00<00:00,  7.62it/s]Iter 8/500: 100%|██████████| 4/4 [00:00<00:00,  7.50it/s]
+LR: 0.000200, Acc: 70.0000, Loss: 1.1175
+Iter 12/500:   0%|          | 0/4 [00:00<?, ?it/s]Iter 12/500:  25%|██▌       | 1/4 [00:00<00:00,  4.27it/s]Iter 12/500:  50%|█████     | 2/4 [00:00<00:00,  6.41it/s]Iter 12/500:  75%|███████▌  | 3/4 [00:00<00:00,  7.64it/s]Iter 12/500: 100%|██████████| 4/4 [00:00<00:00,  7.50it/s]
+LR: 0.000199, Acc: 81.0000, Loss: 0.7668
+Iter 16/500:   0%|          | 0/4 [00:00<?, ?it/s]Iter 16/500:  25%|██▌       | 1/4 [00:00<00:00,  4.21it/s]Iter 16/500:  50%|█████     | 2/4 [00:00<00:00,  6.35it/s]Iter 16/500:  75%|███████▌  | 3/4 [00:00<00:00,  7.59it/s]Iter 16/500: 100%|██████████| 4/4 [00:00<00:00,  7.58it/s]
+Traceback (most recent call last):
+  File "/root/SingloRA_CLIP/main.py", line 53, in <module>
+    main()
+  File "/root/SingloRA_CLIP/main.py", line 50, in main
+    run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, test_loader)
+  File "/root/SingloRA_CLIP/lora.py", line 142, in run_lora
+    for i, (images, target) in enumerate(tqdm(train_loader, desc=f"Iter {count_iters}/{total_iters}")):
+  File "/usr/local/lib/python3.10/dist-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/dataloader.py", line 733, in __next__
+    data = self._next_data()
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/dataloader.py", line 1479, in _next_data
+    self._shutdown_workers()
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/data/dataloader.py", line 1627, in _shutdown_workers
+    w.join(timeout=_utils.MP_STATUS_CHECK_INTERVAL)
+  File "/usr/lib/python3.10/multiprocessing/process.py", line 149, in join
+    res = self._popen.wait(timeout)
+  File "/usr/lib/python3.10/multiprocessing/popen_fork.py", line 40, in wait
+    if not wait([self.sentinel], timeout):
+  File "/usr/lib/python3.10/multiprocessing/connection.py", line 931, in wait
+    ready = selector.select(timeout)
+  File "/usr/lib/python3.10/selectors.py", line 416, in select
+    fd_event_list = self._selector.poll(timeout)
+KeyboardInterrupt

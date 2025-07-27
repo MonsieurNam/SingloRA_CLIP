@@ -10,7 +10,7 @@ DATASETS=('fgvc' 'dtd' 'eurosat' 'caltech101' 'food101' 'oxford_flowers' 'ucf101
 SHOTS=(1)
 
 # Cấu hình CỐ ĐỊNH
-ADAPTER_TYPE="mhsinglora"
+ADAPTER_TYPE="gmhsinglora"
 LEARNING_RATE="2e-4"
 RANK=4
 ALPHA=1
