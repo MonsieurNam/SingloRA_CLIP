@@ -7,7 +7,6 @@ from typing import Dict, List
 from .layers import LoRALayer, PlainMultiheadAttentionLoRA
 from .layers_singlora import  LinearSingLoRA,  PlainMultiheadAttentionAdapter, LinearGMHSingLoRA
 
-# Các từ điển này được sao chép từ loralib/utils.py để giữ nguyên logic
 INDEX_POSITIONS_TEXT = {
     'top1': [11], 'top2': [10, 11], 'top3': [9, 10, 11], 'bottom': [0, 1, 2, 3],
     'mid': [4, 5, 6, 7], 'up': [8, 9, 10, 11], 'half-up': [6, 7, 8, 9, 10, 11],
@@ -62,11 +61,9 @@ def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
     Đóng băng tất cả các tham số, sau đó chỉ mở khóa các tham số của adapter.
     Đây là phiên bản an toàn nhất.
     """
-    # Đóng băng tất cả
     for p in model.parameters():
         p.requires_grad = False
     
-    # Mở khóa các thành phần của adapter
     for n, p in model.named_parameters():
         if 'lora_' in n or 'scaler' in n or 'gating_network' in n:
             p.requires_grad = True
@@ -165,7 +162,6 @@ def save_lora(args, list_lora_layers):
         'metadata': metadata
     }
 
-    # to manage names like ViT-B/16
     backbone = args.backbone.replace('/', '').replace('-', '').lower()
     save_dir = f'{args.save_path}/{backbone}/{args.dataset}/{args.shots}shots/seed{args.seed}'
     os.makedirs(save_dir, exist_ok=True)
@@ -176,7 +172,6 @@ def save_lora(args, list_lora_layers):
 
 
 def load_lora(args, list_lora_layers):
-    # to manage names like ViT-B/16
     backbone = args.backbone.replace('/', '').replace('-', '').lower()
     load_path = f'{args.save_path}/{backbone}/{args.dataset}/{args.shots}shots/seed{args.seed}/{args.filename}.pt'
 
@@ -230,10 +225,9 @@ def apply_adapter(args, clip_model):
     """
     Hàm chung để áp dụng bất kỳ loại adapter nào (SingLoRA, DySingLoRA, MH-SingLoRA, G-MHSingLoRA).
     """
-    # Map tên adapter từ args sang lớp tương ứng
     adapter_map = {
         'singlora': LinearSingLoRA,
-        'gmhsinglora': LinearGMHSingLoRA # <-- THÊM VÀO MAP
+        'gmhsinglora': LinearGMHSingLoRA 
     }
 
     if args.adapter not in adapter_map:
@@ -242,18 +236,15 @@ def apply_adapter(args, clip_model):
     linear_adapter_class = adapter_map[args.adapter]
     print(f">> Applying {args.adapter.upper()} adapter...")
 
-    # Tạo một dict chứa các kwargs chung cho các lớp adapter
     adapter_kwargs = {
         'r': args.r,
         'lora_alpha': args.alpha,
         'ramp_up_steps': args.ramp_up_steps
     }
 
-    # Thêm các tham số đặc thù cho từng loại adapter
     if args.adapter in [ 'gmhsinglora']:
         adapter_kwargs['num_heads'] = args.num_heads
 
-    # Lặp qua cả hai encoder
     for encoder_name in ['text', 'vision']:
         if args.encoder == encoder_name or args.encoder == 'both':
             print(f"   Processing {encoder_name.capitalize()} Encoder...")
@@ -267,7 +258,6 @@ def apply_adapter(args, clip_model):
 
             for i, block in enumerate(encoder.resblocks):
                 if i in indices:
-                    # Thay thế MHA bằng lớp vỏ chung
                     new_mha = PlainMultiheadAttentionAdapter(
                         block.attn,
                         linear_adapter_class=linear_adapter_class,
@@ -276,7 +266,6 @@ def apply_adapter(args, clip_model):
                     )
                     block.attn = new_mha
 
-                    # Áp dụng cho các lớp MLP nếu được yêu cầu
                     if 'mlp' in args.params:
                         for mlp_layer_name, mlp_layer in block.mlp.named_children():
                             if isinstance(mlp_layer, nn.Linear):
@@ -287,7 +276,7 @@ def apply_adapter(args, clip_model):
                                 setattr(block.mlp, mlp_layer_name, new_linear_layer)
 
     print("Finished applying adapters.")
-    return [] # Không cần trả về list nữa
+    return [] 
 
 def save_adapter(args, model):
     """
@@ -295,13 +284,10 @@ def save_adapter(args, model):
     """
     adapter_state_dict = {}
     
-    # Thu thập các tham số cần lưu từ state_dict của mô hình
     for name, param in model.state_dict().items():
-        # Dựa vào quy ước đặt tên để xác định tham số của adapter
         if 'lora_' in name or 'gating_network' in name:
             adapter_state_dict[name] = param
 
-    # Tạo metadata để xác minh khi tải
     metadata = {
         'adapter': args.adapter,
         'r': args.r,
@@ -317,7 +303,6 @@ def save_adapter(args, model):
         'metadata': metadata
     }
     
-    # Tạo đường dẫn và lưu file
     backbone_str = args.backbone.replace('/', '')
     save_dir = os.path.join(args.save_path, args.adapter, backbone_str, args.dataset, f"{args.shots}shots", f"seed{args.seed}")
     os.makedirs(save_dir, exist_ok=True)
@@ -339,7 +324,6 @@ def load_adapter(args, model):
         
     loaded_data = torch.load(load_path, map_location='cpu')
     
-    # Kiểm tra metadata (rất quan trọng để tránh lỗi)
     metadata = loaded_data.get('metadata', {})
     expected_metadata = {
         'adapter': args.adapter,
@@ -352,8 +336,6 @@ def load_adapter(args, model):
     
     weights = loaded_data['weights']
     
-    # Tải trọng số vào mô hình. `strict=False` là cần thiết vì chúng ta
-    # chỉ tải một phần nhỏ của toàn bộ state_dict.
     incompatible_keys = model.load_state_dict(weights, strict=False)
     
     if incompatible_keys.missing_keys:

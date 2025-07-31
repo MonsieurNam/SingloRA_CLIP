@@ -28,7 +28,6 @@ def get_arguments():
     parser.add_argument('--n_iters', default=500, type=int)
     parser.add_argument('--batch_size', default=32, type=int)
 
-    # --- START OF MODIFICATIONS FOR PHASE 2 ---
 
     # General Adapter arguments
     parser.add_argument('--adapter', type=str, default='lora', 
@@ -60,7 +59,6 @@ def get_arguments():
     parser.add_argument('--ramp_up_steps', type=int, default=1000,
                         help='[SingLoRA only] Number of ramp-up steps (T) for the adapter.')
 
-    # --- END OF MODIFICATIONS FOR PHASE 2 ---
 
     parser.add_argument('--save_path', default=None, help='Path to save the adapter modules after training. Not saved if None.')
     parser.add_argument('--filename', default='adapter_weights', help='File name to save the adapter weights (.pt extension will be added).')

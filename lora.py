@@ -4,7 +4,7 @@ import time
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
-import clip  # Giả sử thư mục clip đã có trong dự án
+import clip  
 
 from utils import *
 
@@ -20,12 +20,10 @@ def evaluate(args, clip_model, loader, dataset):
     clip_model.eval()
     with torch.no_grad():
         template = dataset.template[0]
-        # Tokenize classnames
         texts = [template.format(classname.replace('_', ' ')) for classname in dataset.classnames]
         with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
             texts = clip.tokenize(texts).cuda()
             class_embeddings = clip_model.encode_text(texts)
-        # Chuẩn hóa các đặc trưng văn bản
         text_features = class_embeddings / class_embeddings.norm(dim=-1, keepdim=True)
 
     acc = 0.
@@ -35,14 +33,8 @@ def evaluate(args, clip_model, loader, dataset):
             images, target = images.cuda(), target.cuda()
             with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
                 image_features = clip_model.encode_image(images)
-
-            # Chuẩn hóa các đặc trưng hình ảnh
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-
-            # Tính toán độ tương đồng cosine
             cosine_similarity = image_features @ text_features.t()
-
-            # Tính độ chính xác
             acc += cls_acc(cosine_similarity, target) * len(cosine_similarity)
             tot_samples += len(cosine_similarity)
 
@@ -54,17 +46,14 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     """
     Hàm chính điều phối toàn bộ quy trình, giờ đây có thêm chức năng đo lường.
     """
-     # ==================== ĐO VRAM KHI TẢI ====================
     print("\nMoving model and data to GPU for evaluation...")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
         clip_model.cuda()
     
-    # Textual features
     print("\nGetting textual features as CLIP's classifier.")
     textual_features = clip_classifier(dataset.classnames, dataset.template, clip_model)
 
-    # Pre-load test features để đánh giá zero-shot
     print("\nLoading visual features and labels from test set for zero-shot evaluation.")
     test_features, test_labels = pre_load_features(clip_model, test_loader)
     if torch.cuda.is_available():
@@ -78,12 +67,10 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     test_features = test_features.cuda()
     test_labels = test_labels.cuda()
 
-    # Đánh giá Zero-shot CLIP làm baseline
     clip_logits = logit_scale * test_features @ textual_features
     zs_acc = cls_acc(clip_logits, test_labels)
     print("\n**** Zero-shot CLIP's test accuracy: {:.2f}. ****\n".format(zs_acc))
 
-    # Giải phóng bộ nhớ GPU
     del test_features, test_labels
     torch.cuda.empty_cache()
 
@@ -95,7 +82,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     
     clip_model = clip_model.cuda()
 
-    # Chế độ chỉ đánh giá (không huấn luyện)
     if args.eval_only:
         print(f"\nEvaluation-only mode for {args.adapter.upper()} adapter.")
         if args.adapter == 'lora':
@@ -117,14 +103,12 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
 
     print(f"\nStarting {args.adapter.upper()} fine-tuning for {total_iters} iterations...")
     
-    # ==================== ĐO LƯỜNG KHI HUẤN LUYỆN (LOGIC MỚI) ====================
     if torch.cuda.is_available():
         torch.cuda.synchronize()
         torch.cuda.reset_peak_memory_stats()
     
     start_time = time.time()
     vram_checked_after_first_step = False
-    # ========================================================================
 
     scaler = torch.amp.GradScaler(device='cuda')
     count_iters = 0
@@ -138,12 +122,9 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
         if args.encoder == 'vision':
             text_features_train = textual_features.clone().half()
 
-        # Vòng lặp qua từng batch dữ liệu huấn luyện
         for i, (images, target) in enumerate(tqdm(train_loader, desc=f"Iter {count_iters}/{total_iters}")):
 
             images, target = images.cuda(), target.cuda()
-
-            # Nếu text encoder được fine-tune, cần tính lại text_features mỗi bước
             if args.encoder == 'text' or args.encoder == 'both':
                 template = dataset.template[0]
                 texts = [template.format(classname.replace('_', ' ')) for classname in dataset.classnames]
@@ -152,27 +133,23 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
                     class_embeddings = clip_model.encode_text(texts)
                 text_features_train = class_embeddings / class_embeddings.norm(dim=-1, keepdim=True)
 
-            # Tính image_features
             if args.encoder == 'vision' or args.encoder == 'both':
                 with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
                     image_features = clip_model.encode_image(images)
-            else: # Nếu chỉ fine-tune text encoder, không cần tính lại gradient cho vision
+            else: 
                 with torch.no_grad():
                     with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
                         image_features = clip_model.encode_image(images)
 
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
-            # Tính loss
             cosine_similarity = logit_scale * image_features @ text_features_train.t()
             loss = F.cross_entropy(cosine_similarity, target)
 
-            # Cập nhật các chỉ số
             acc_train += cls_acc(cosine_similarity, target) * target.shape[0]
             loss_epoch += loss.item() * target.shape[0]
             tot_samples += target.shape[0]
 
-            # Backward pass và cập nhật trọng số
             optimizer.zero_grad()
             scaler.scale(loss).backward()
             torch.nn.utils.clip_grad_norm_(optimizer_params, max_norm=1.0)
@@ -180,8 +157,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             scaler.update()
             scheduler.step()
 
-            # ==================== ĐO LƯỜNG KHI HUẤN LUYỆN (LOGIC MỚI) ====================
-            # In ra VRAM đỉnh điểm ngay sau lần cập nhật đầu tiên
             if not vram_checked_after_first_step:
                 if torch.cuda.is_available():
                     torch.cuda.synchronize()
@@ -190,27 +165,23 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
                     print(f"    Peak VRAM after first optimization step: {peak_vram_first_step:.3f} GB")
                     print(f"-----------------------------------------\n")
                 vram_checked_after_first_step = True
-            # ========================================================================
 
             count_iters += 1
             if count_iters >= total_iters:
                 break
 
-        # In log sau mỗi epoch (hoặc sau một số lần lặp nhất định)
         if count_iters < total_iters:
             acc_train /= tot_samples
             loss_epoch /= tot_samples
             current_lr = scheduler.get_last_lr()[0]
             print('LR: {:.6f}, Acc: {:.4f}, Loss: {:.4f}'.format(current_lr, acc_train, loss_epoch))
 
-    # ==================== GHI NHẬN KẾT QUẢ ĐO LƯỜNG (LOGIC MỚI) ====================
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     
     end_time = time.time()
     total_finetuning_time = end_time - start_time
     
-    # Lấy VRAM đỉnh điểm của toàn bộ quá trình huấn luyện
     peak_vram_total_finetuning = 0
     if torch.cuda.is_available():
         peak_vram_total_finetuning = torch.cuda.max_memory_allocated() / (1024**3)
@@ -219,7 +190,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     print(f"Total Finetuning Time: {total_finetuning_time:.2f} seconds")
     print(f"Peak VRAM during entire Finetuning: {peak_vram_total_finetuning:.3f} GB")
     print("---------------------------------------------------\n")
-    # =================================================================================
 
     print("\nFine-tuning finished.")
 
