@@ -44,15 +44,25 @@ def evaluate(args, clip_model, loader, dataset):
 
 def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, test_loader):
     """
-    Hàm chính điều phối toàn bộ quy trình, giờ đây có thêm chức năng đo lường.
+    Hàm chính điều phối toàn bộ quy trình, đã tích hợp Prompt Ensembling và Context-Aware Adapter.
     """
     print("\nMoving model and data to GPU for evaluation...")
     if torch.cuda.is_available():
         torch.cuda.reset_peak_memory_stats()
         clip_model.cuda()
     
+    # === [THAY ĐỔI 1]: Tích hợp Prompt Ensembling và Tính toán Task Vector ===
+    templates = dataset.template
+    print(f"\nSử dụng {len(templates)} templates cho Prompt Ensembling.")
+
     print("\nGetting textual features as CLIP's classifier.")
-    textual_features = clip_classifier(dataset.classnames, dataset.template, clip_model)
+    textual_features = clip_classifier(dataset.classnames, templates, clip_model)
+
+    print("Calculating task-level context vector for Context-Aware Adapter.")
+    with torch.no_grad():
+        task_vector = textual_features.mean(dim=1).cuda()
+    print(f"    Task vector created with shape: {task_vector.shape}")
+    # =====================================================================
 
     print("\nLoading visual features and labels from test set for zero-shot evaluation.")
     test_features, test_labels = pre_load_features(clip_model, test_loader)
@@ -63,7 +73,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
         print(f"    Peak VRAM for zero-shot eval setup: {peak_vram_loading:.3f} GB")
         print(f"----------------------------------------\n")
         
-
     test_features = test_features.cuda()
     test_labels = test_labels.cuda()
 
@@ -78,6 +87,7 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     if args.adapter == 'lora':
         list_adapter_layers = apply_lora(args, clip_model)
     elif args.adapter in ['singlora', 'gmhsinglora']:
+        # Giả định apply_adapter đã được cập nhật để truyền embed_dim
         list_adapter_layers = apply_adapter(args, clip_model)
     
     clip_model = clip_model.cuda()
@@ -109,7 +119,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     
     start_time = time.time()
     vram_checked_after_first_step = False
-
     scaler = torch.amp.GradScaler(device='cuda')
     count_iters = 0
 
@@ -123,28 +132,36 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             text_features_train = textual_features.clone().half()
 
         for i, (images, target) in enumerate(tqdm(train_loader, desc=f"Iter {count_iters}/{total_iters}")):
-
             images, target = images.cuda(), target.cuda()
+            
             if args.encoder == 'text' or args.encoder == 'both':
-                template = dataset.template[0]
-                texts = [template.format(classname.replace('_', ' ')) for classname in dataset.classnames]
-                with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
-                    texts = clip.tokenize(texts).cuda()
-                    class_embeddings = clip_model.encode_text(texts)
-                text_features_train = class_embeddings / class_embeddings.norm(dim=-1, keepdim=True)
+                # Tính lại text_features với Prompt Ensembling để phản ánh adapter đã được huấn luyện
+                text_features_train = clip_classifier(dataset.classnames, templates, clip_model)
+
+            # === [THAY ĐỔI 2]: Truyền task_vector vào Image Encoder ===
+            # Giả định encode_image đã được sửa để nhận 'task_vector'
+            adapter_kwargs = {}
+            if args.adapter == 'gmhsinglora': # Chỉ truyền khi dùng adapter context-aware
+                 adapter_kwargs['task_vector'] = task_vector
 
             if args.encoder == 'vision' or args.encoder == 'both':
                 with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
-                    image_features = clip_model.encode_image(images)
-            else: 
+                    image_features = clip_model.encode_image(images, **adapter_kwargs)
+            else: # encoder == 'text'
                 with torch.no_grad():
                     with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
-                        image_features = clip_model.encode_image(images)
+                        # Vẫn truyền task_vector ngay cả khi không huấn luyện vision encoder
+                        # để đảm bảo logic nhất quán nếu mạng gating được áp dụng.
+                        image_features = clip_model.encode_image(images, **adapter_kwargs)
+            # =========================================================
 
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
 
             cosine_similarity = logit_scale * image_features @ text_features_train.t()
-            loss = F.cross_entropy(cosine_similarity, target)
+            
+            # === [THAY ĐỔI 3]: Tích hợp Label Smoothing (Cải tiến đề xuất) ===
+            loss = F.cross_entropy(cosine_similarity, target, label_smoothing=0.1) # Thêm label_smoothing
+            # ===============================================================
 
             acc_train += cls_acc(cosine_similarity, target) * target.shape[0]
             loss_epoch += loss.item() * target.shape[0]

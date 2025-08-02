@@ -48,22 +48,21 @@ def cls_acc(output, target, topk=1):
     return acc
 
 
-def clip_classifier(classnames, template, clip_model):
+def clip_classifier(classnames, templates, clip_model):
     with torch.no_grad():
         clip_weights = []
         for classname in classnames:
-            # Tokenize the prompts
-            classname = classname.replace('_', ' ')
-            texts = [t.format(classname) for t in template]
-            texts = clip.tokenize(texts).cuda()
-            class_embeddings = clip_model.encode_text(texts)
-            class_embeddings /= class_embeddings.norm(dim=-1, keepdim=True)
-            class_embedding = class_embeddings.mean(dim=0)
-            class_embedding /= class_embedding.norm()
-            clip_weights.append(class_embedding)
+            prompts = [template.format(classname.replace('_', ' ')) for template in templates]
+            tokenized_prompts = clip.tokenize(prompts).cuda()
+            text_embeddings = clip_model.encode_text(tokenized_prompts)
+            text_embeddings /= text_embeddings.norm(dim=-1, keepdim=True)
+            mean_text_embedding = text_embeddings.mean(dim=0)
+            mean_text_embedding /= mean_text_embedding.norm()
+            clip_weights.append(mean_text_embedding)
         clip_weights = torch.stack(clip_weights, dim=1).cuda()
         
     return clip_weights
+
 
 
 def pre_load_features(clip_model, loader):

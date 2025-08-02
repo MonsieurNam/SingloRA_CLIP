@@ -7,8 +7,15 @@ from .oxford_pets import OxfordPets
 """
 template = ['a photo of a person doing {}.']
 """
-template = ['a photo of a {}.']
-
+template = [
+    'a photo of a person doing {}.',
+    'a photo of a person performing the action: {}.',
+    'a photo of a person {}.',
+    'a photo of someone {}.',
+    'a video frame of a person {}.',
+    'an image of a person {}.',
+    'a photo of the action {}.'
+]
 class UCF101(DatasetBase):
 
     dataset_dir = 'UCF101'

@@ -10,8 +10,15 @@ from .utils import Datum, DatasetBase, read_json, write_json, build_data_loader
 """
 template = ['a photo of a {}, a type of pet.']
 """
-template = ['a photo of a {}.']
-
+template = [
+    'a photo of a {}, a type of pet.',
+    'a photo of my cute pet {}.',
+    'a close-up of a {}.',
+    'a photo of the animal {}.',
+    'a photo of a {}.',
+    'a picture of the {}.',
+    'a drawing of the {}.'
+]
 class OxfordPets(DatasetBase):
 
     dataset_dir = 'OxfordPets'

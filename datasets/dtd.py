@@ -7,8 +7,15 @@ from .oxford_pets import OxfordPets
 """
 template = ['{} texture.']
 """
-template = ['a photo of a {}.']
-
+template = [
+    'a photo of a {} texture.',
+    'a photo of a {}.',
+    'a texture that is {}.',
+    'a surface with a {} pattern.',
+    'a close-up of a {} texture.',
+    'a photo of a {} surface.',
+    'a background with a {} texture.'
+]
 class DescribableTextures(DatasetBase):
 
     dataset_dir = 'DTD'

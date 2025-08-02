@@ -5,7 +5,14 @@ from .utils import Datum, DatasetBase, read_json, write_json, build_data_loader
 """
 template = ['a photo of a {}, a type of aircraft.']
 """
-template = ['a photo of a {}.']
+template = [
+    'a photo of a {}, a type of aircraft.',
+    'a photo of the {} aircraft.',
+    'a photo of a {}.',
+    'a picture of the {}.',
+    'a drawing of a {}.',
+    'the {} aircraft in the sky.'
+]
 class FGVCAircraft(DatasetBase):
 
     dataset_dir = 'fgvc_aircraft'

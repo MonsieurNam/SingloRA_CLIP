@@ -6,8 +6,15 @@ from .oxford_pets import OxfordPets
 """
 template = ['a photo of {}, a type of food.']
 """
-template = ['a photo of a {}.']
-
+template = [
+    'a photo of {}, a type of food.',
+    'a photo of the delicious {}.',
+    'a picture of {}, a dish.',
+    'a serving of {}.',
+    'a photo of {}.',
+    'a recipe for {}.',
+    'a close-up of {}.'
+]
 class Food101(DatasetBase):
 
     dataset_dir = 'Food101'

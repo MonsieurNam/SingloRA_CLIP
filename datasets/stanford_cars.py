@@ -5,7 +5,15 @@ from .oxford_pets import OxfordPets
 from .utils import Datum, DatasetBase
 
 
-template = ['a photo of a {}.']
+template = [
+    'a photo of a {}.',
+    'a photo of the car {}.',
+    'a photo of my new car, a {}.',
+    'a picture of a {} car.',
+    'a side view of the {}.',
+    'a photo of the front of a {}.',
+    'the {} model of car.'
+]
 
 
 class StanfordCars(DatasetBase):

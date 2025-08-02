@@ -6,7 +6,15 @@ from .oxford_pets import OxfordPets
 """
 template = ['a centered satellite photo of {}.']
 """
-template = ['a photo of a {}.']
+template = [
+    'a centered satellite photo of {}.',
+    'a satellite photo of {}.',
+    'a high-resolution satellite image of {}.',
+    'a photo of a {}.', # Giữ lại để có sự đa dạng
+    'a patch of {} land.',
+    'a photo of a {} area.',
+    'a zoomed-in satellite photo of {}.'
+]
 
 NEW_CNAMES = {
     'AnnualCrop': 'Annual Crop Land',

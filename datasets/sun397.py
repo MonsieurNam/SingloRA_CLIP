@@ -5,8 +5,15 @@ from .utils import Datum, DatasetBase, read_json, write_json, build_data_loader
 from .oxford_pets import OxfordPets
 
 
-template = ['a photo of a {}.']
-
+template = [
+    'a photo of a {}.',
+    'a photo of the {}.',
+    'a picture of a {}.',
+    'a photo of a scene: {}.',
+    'an image of a {} place.',
+    'a photo taken at a {}.',
+    'a view of the {}.'
+]
 
 class SUN397(DatasetBase):
 

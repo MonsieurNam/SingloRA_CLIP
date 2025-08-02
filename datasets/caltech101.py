@@ -4,7 +4,15 @@ from .utils import Datum, DatasetBase
 from .oxford_pets import OxfordPets
 
 
-template = ['a photo of a {}.']
+template = [
+    'a photo of a {}.',
+    'a picture of a {}.',
+    'a drawing of a {}.',
+    'a black and white photo of a {}.',
+    'a photo of the object: {}.',
+    'a cropped photo of a {}.',
+    'a photo of the large {}.'
+]
 
 
 class Caltech101(DatasetBase):
