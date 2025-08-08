@@ -1,0 +1,16 @@
+Preparing dataset.
+Reading split from /root/DATA/Caltech101/split_zhou_Caltech101.json
+Traceback (most recent call last):
+  File "/root/SingloRA_CLIP/CLIP-LoRA/main.py", line 53, in <module>
+    main()
+  File "/root/SingloRA_CLIP/CLIP-LoRA/main.py", line 27, in main
+    dataset = build_dataset(args.dataset, args.root_path, args.shots, preprocess)
+  File "/root/SingloRA_CLIP/CLIP-LoRA/datasets/__init__.py", line 33, in build_dataset
+    return dataset_list[dataset](root_path, shots)
+  File "/root/SingloRA_CLIP/CLIP-LoRA/datasets/caltech101.py", line 21, in __init__
+    train, val, test = OxfordPets.read_split(self.split_path, self.image_dir)
+  File "/root/SingloRA_CLIP/CLIP-LoRA/datasets/oxford_pets.py", line 123, in read_split
+    split = read_json(filepath)
+  File "/root/SingloRA_CLIP/CLIP-LoRA/datasets/utils.py", line 17, in read_json
+    with open(fpath, 'r') as f:
+FileNotFoundError: [Errno 2] No such file or directory: '/root/DATA/Caltech101/split_zhou_Caltech101.json'
