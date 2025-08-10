@@ -88,17 +88,14 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
     center_loss_func = None
     optimizer_center_loss = None
     arcface_loss_func = None
-    cosface_loss_func = None # Thêm dòng này
-    maxent_loss_func = None # Thêm dòng này
+    cosface_loss_func = None
+    maxent_loss_func = None
 
     if args.loss_type == 'ce_center':
         print("Using Cross-Entropy + Center Loss.")
-        # Lấy feature_dim từ text_features hoặc image_features
         feature_dim = textual_features.shape[0]
         num_classes = len(dataset.classnames)
         center_loss_func = CenterLoss(num_classes=num_classes, feat_dim=feature_dim, use_gpu=True)
-
-        # Center Loss thường dùng optimizer riêng với learning rate khác
         optimizer_center_loss = torch.optim.SGD(center_loss_func.parameters(), lr=0.5)
     elif args.loss_type == 'arcface':
         print(f"Using ArcFace Loss with s={args.arcface_s} and m={args.arcface_m}.")
@@ -165,7 +162,6 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             elif args.loss_type == 'ce_maxent': # Thêm nhánh này
                 loss_ce = F.cross_entropy(logits, target)
                 loss_entropy = maxent_loss_func(logits)
-                # TRỪ đi entropy để cực đại hóa nó
                 loss = loss_ce - args.maxent_loss_weight * loss_entropy
             else:
                 raise ValueError(f"Unknown loss type: {args.loss_type}")
@@ -185,11 +181,7 @@ def run_lora(args, clip_model, logit_scale, dataset, train_loader, val_loader, t
             scheduler.step()
 
             if optimizer_center_loss:
-                # Loại bỏ việc scale gradient cho center loss optimizer vì nó đơn giản
-                # và không cần amp.
-                # Gradient đã được tính trong loss.backward()
                 for param in center_loss_func.parameters():
-                    # Thực hiện unscale gradient bằng tay
                     if param.grad is not None:
                         param.grad.data.mul_(1. / scaler.get_scale())
                 optimizer_center_loss.step()

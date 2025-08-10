@@ -25,21 +25,9 @@ class CosFaceLoss(nn.Module):
             cosine: The cosine similarity between features and weights, with shape (batch_size, num_classes).
             labels: Ground truth labels with shape (batch_size).
         """
-        # 1. Create a one-hot mask for the ground truth classes
         one_hot = torch.zeros(cosine.size(), device=cosine.device)
         one_hot.scatter_(1, labels.view(-1, 1).long(), 1)
-
-        # 2. Subtract the margin 'm' from the cosine similarity of the correct class
-        # phi = cos(theta) - m
         phi = cosine - self.m
-
-        # 3. Assemble the final output logits
-        # Where the label is correct, use the modified logit (phi)
-        # Where the label is incorrect, use the original logit (cosine)
         output = (one_hot * phi) + ((1.0 - one_hot) * cosine)
-
-        # 4. Scale the output
         output *= self.s
-
-        # 5. Calculate the final cross-entropy loss
         return F.cross_entropy(output, labels)
