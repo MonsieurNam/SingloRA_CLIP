@@ -1,4 +1,5 @@
 # @title run_utils.py
+# %%writefile /content/SingloRA_CLIP/run_utils.py
 
 import random
 import argparse
@@ -30,11 +31,11 @@ def get_arguments():
 
 
     # General Adapter arguments
-    parser.add_argument('--adapter', type=str, default='lora', 
-                        choices=['lora', 'singlora', 'gmhsinglora'], # Thêm 'gmhsinglora'
+    parser.add_argument('--adapter', type=str, default='lora',
+                        choices=['lora', 'singlora', 'gmhsinglora', 'ohsinglora'], # Thêm 'gmhsinglora'
                         help='The type of adapter to use for fine-tuning.')
-    
-    
+
+
     # MH-SingLoRA-specific arguments
     parser.add_argument('--num_heads', type=int, default=2,
                         help='[MH-SingLoRA & G-MHSingLoRA only] Number of heads for the adapter.')
@@ -50,6 +51,8 @@ def get_arguments():
                         help='The rank of the low-rank matrices.')
     parser.add_argument('--alpha', default=1, type=int,
                         help='The scaling factor (lora_alpha).')
+    parser.add_argument('--lambda_o', type=float, default=0.0,
+                        help='Coefficient for the orthogonal regularization loss. Default: 0.0 (disabled).')
 
     # LoRA-specific arguments
     parser.add_argument('--dropout_rate', default=0.25, type=float,
@@ -64,7 +67,18 @@ def get_arguments():
     parser.add_argument('--filename', default='adapter_weights', help='File name to save the adapter weights (.pt extension will be added).')
 
     parser.add_argument('--eval_only', default=False, action='store_true', help='Only evaluate the adapter modules (save_path should not be None).')
+
+    # loss argumment
+    parser.add_argument('--loss_fn', type=str, default='ce',
+                        choices=['ce', 'ce_ls', 'arcface', 'cosface', 'ce_center', 'ce_maxent'],
+                        help='The main classification loss function to use.')
+    parser.add_argument('--label_smoothing', type=float, default=0.1, help='Label smoothing factor.')
+    parser.add_argument('--metric_s', type=float, default=30.0, help='Scale factor (s) for ArcFace/CosFace.')
+    parser.add_argument('--metric_m', type=float, default=0.50, help='Margin (m) for ArcFace/CosFace.')
+    parser.add_argument('--lambda_center', type=float, default=0.003, help='Weight for the Center Loss.')
+    parser.add_argument('--lambda_maxent', type=float, default=0.1, help='Weight for the Maximum Entropy regularization.')
     args = parser.parse_args()
+
 
     return args
 

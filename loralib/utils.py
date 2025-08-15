@@ -1,4 +1,6 @@
 # @title loralib/utils.py
+# %%writefile /content/SingloRA_CLIP/loralib/utils.py
+
 import os
 import torch
 import torch.nn as nn
@@ -6,6 +8,7 @@ from typing import Dict, List
 
 from .layers import LoRALayer, PlainMultiheadAttentionLoRA
 from .layers_singlora import  LinearSingLoRA,  PlainMultiheadAttentionAdapter, LinearGMHSingLoRA
+from .layers_OH_singlora import LinearOHsingLoRA
 
 INDEX_POSITIONS_TEXT = {
     'top1': [11], 'top2': [10, 11], 'top3': [9, 10, 11], 'bottom': [0, 1, 2, 3],
@@ -63,11 +66,11 @@ def mark_only_lora_as_trainable(model: nn.Module, bias: str = 'none') -> None:
     """
     for p in model.parameters():
         p.requires_grad = False
-    
+
     for n, p in model.named_parameters():
         if 'lora_' in n or 'scaler' in n or 'gating_network' in n:
             p.requires_grad = True
-            
+
     if bias == 'none':
         return
     if bias == 'all':
@@ -223,11 +226,12 @@ def load_lora(args, list_lora_layers):
 
 def apply_adapter(args, clip_model):
     """
-    Hàm chung để áp dụng bất kỳ loại adapter nào (SingLoRA, DySingLoRA, MH-SingLoRA, G-MHSingLoRA).
+    Hàm chung để áp dụng bất kỳ loại adapter nào.
     """
     adapter_map = {
         'singlora': LinearSingLoRA,
-        'gmhsinglora': LinearGMHSingLoRA 
+        'gmhsinglora': LinearGMHSingLoRA,
+        'ohsinglora': LinearOHsingLoRA  
     }
 
     if args.adapter not in adapter_map:
@@ -242,7 +246,7 @@ def apply_adapter(args, clip_model):
         'ramp_up_steps': args.ramp_up_steps
     }
 
-    if args.adapter in [ 'gmhsinglora']:
+    if args.adapter in ['gmhsinglora', 'ohsinglora']:
         adapter_kwargs['num_heads'] = args.num_heads
 
     for encoder_name in ['text', 'vision']:
@@ -252,7 +256,7 @@ def apply_adapter(args, clip_model):
             if encoder_name == 'text':
                 encoder = clip_model.transformer
                 indices = INDEX_POSITIONS_TEXT[args.position]
-            else:
+            else: # vision
                 encoder = clip_model.visual.transformer
                 indices = INDEX_POSITIONS_VISION[args.backbone][args.position]
 
@@ -261,8 +265,8 @@ def apply_adapter(args, clip_model):
                     new_mha = PlainMultiheadAttentionAdapter(
                         block.attn,
                         linear_adapter_class=linear_adapter_class,
-                        **adapter_kwargs,
-                        enable_lora=args.params
+                        enable_lora=args.params,
+                        **adapter_kwargs
                     )
                     block.attn = new_mha
 
@@ -276,14 +280,14 @@ def apply_adapter(args, clip_model):
                                 setattr(block.mlp, mlp_layer_name, new_linear_layer)
 
     print("Finished applying adapters.")
-    return [] 
+    return []
 
 def save_adapter(args, model):
     """
     Hàm chung để lưu các trọng số có thể huấn luyện của adapter.
     """
     adapter_state_dict = {}
-    
+
     for name, param in model.state_dict().items():
         if 'lora_' in name or 'gating_network' in name:
             adapter_state_dict[name] = param
@@ -297,17 +301,17 @@ def save_adapter(args, model):
         'encoder': args.encoder,
         'backbone': args.backbone,
     }
-    
+
     save_data = {
         'weights': adapter_state_dict,
         'metadata': metadata
     }
-    
+
     backbone_str = args.backbone.replace('/', '')
     save_dir = os.path.join(args.save_path, args.adapter, backbone_str, args.dataset, f"{args.shots}shots", f"seed{args.seed}")
     os.makedirs(save_dir, exist_ok=True)
     save_path = os.path.join(save_dir, 'adapter_weights.pt')
-    
+
     torch.save(save_data, save_path)
     print(f"{args.adapter.upper()} weights saved to {save_path}")
 
@@ -318,12 +322,12 @@ def load_adapter(args, model):
     """
     backbone_str = args.backbone.replace('/', '')
     load_path = os.path.join(args.save_path, args.adapter, backbone_str, args.dataset, f"{args.shots}shots", f"seed{args.seed}", 'adapter_weights.pt')
-    
+
     if not os.path.exists(load_path):
         raise FileNotFoundError(f"Adapter weights not found at: {load_path}")
-        
+
     loaded_data = torch.load(load_path, map_location='cpu')
-    
+
     metadata = loaded_data.get('metadata', {})
     expected_metadata = {
         'adapter': args.adapter,
@@ -333,14 +337,14 @@ def load_adapter(args, model):
     for key, value in expected_metadata.items():
         if metadata.get(key) != value:
             raise ValueError(f"Metadata mismatch for '{key}'! Expected '{value}', but found '{metadata.get(key)}' in checkpoint.")
-    
+
     weights = loaded_data['weights']
-    
+
     incompatible_keys = model.load_state_dict(weights, strict=False)
-    
+
     if incompatible_keys.missing_keys:
         print(f"Info: Some adapter keys were not found in the model state_dict (this is expected): {incompatible_keys.missing_keys[:5]}...")
     if incompatible_keys.unexpected_keys:
         print(f"Warning: The checkpoint contains unexpected keys not present in the model: {incompatible_keys.unexpected_keys}")
-        
+
     print(f"{args.adapter.upper()} weights loaded from {load_path}")
